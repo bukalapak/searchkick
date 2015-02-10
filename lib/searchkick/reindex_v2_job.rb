@@ -4,20 +4,9 @@ module Searchkick
 
     def perform(klass, id)
       model = klass.constantize
-      record = model.find(id) rescue nil # TODO fix lazy coding
+      record = model.unscoped.where(id: id).first
       index = model.searchkick_index
-      if !record or !record.should_index?
-        # hacky
-        record ||= model.new
-        record.id = id
-        begin
-          index.remove record
-        rescue Elasticsearch::Transport::Transport::Errors::NotFound
-          # do nothing
-        end
-      else
-        index.store record
-      end
+      index.store record if record
     end
 
   end
