@@ -44,7 +44,9 @@ module Searchkick
           end
 
           def reindex(options = {})
-            searchkick_index.reindex_scope(searchkick_klass, options)
+            # searchkick_index.reindex_scope(searchkick_klass, options)
+            log = Logger.new("#{Rails.root}/log/searchkick.log")
+            log.debug("#{searchkick_klass} - #{options.to_s}")
           end
 
           def clean_indices
