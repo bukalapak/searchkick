@@ -217,17 +217,17 @@ module Searchkick
                 tokenizer: "standard",
                 # synonym should come last, after stemming and shingle
                 # shingle must come before searchkick_stemmer
-                filter: ["standard", "lowercase", "asciifolding", "searchkick_index_shingle", "searchkick_stemmer"]
+                filter: ["standard", "lowercase", "asciifolding", "searchkick_index_shingle"]
               },
               searchkick_search: {
                 type: "custom",
                 tokenizer: "standard",
-                filter: ["standard", "lowercase", "asciifolding", "searchkick_search_shingle", "searchkick_stemmer"]
+                filter: ["standard", "lowercase", "asciifolding", "searchkick_search_shingle"]
               },
               searchkick_search2: {
                 type: "custom",
                 tokenizer: "standard",
-                filter: ["standard", "lowercase", "asciifolding", "searchkick_stemmer"]
+                filter: ["standard", "lowercase", "asciifolding"]
               },
               # https://github.com/leschenko/elasticsearch_autocomplete/blob/master/lib/elasticsearch_autocomplete/analyzers.rb
               searchkick_autocomplete_index: {
