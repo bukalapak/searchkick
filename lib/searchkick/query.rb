@@ -70,7 +70,7 @@ module Searchkick
               like_text: term,
               min_doc_freq: 1,
               min_term_freq: 1,
-              analyzer: "indonesian"
+              analyzer: "searchkick_search2"
             }
           }
         elsif all
@@ -101,15 +101,15 @@ module Searchkick
               if field == "_all" or field.end_with?(".analyzed")
                 shared_options[:cutoff_frequency] = 0.001 unless operator == "and"
                 qs.concat [
-                  shared_options.merge(boost: 10 * factor, analyzer: "indonesian_with_shingle"),
-                  shared_options.merge(boost: 10 * factor, analyzer: "indonesian")
+                  shared_options.merge(boost: 10 * factor, analyzer: "searchkick_search"),
+                  shared_options.merge(boost: 10 * factor, analyzer: "searchkick_search2")
                 ]
                 misspellings = options.has_key?(:misspellings) ? options[:misspellings] : options[:mispellings] # why not?
                 if misspellings != false
                   edit_distance = (misspellings.is_a?(Hash) && (misspellings[:edit_distance] || misspellings[:distance])) || 1
                   qs.concat [
-                    shared_options.merge(fuzziness: edit_distance, max_expansions: 3, analyzer: "indonesian_with_shingle"),
-                    shared_options.merge(fuzziness: edit_distance, max_expansions: 3, analyzer: "indonesian")
+                    shared_options.merge(fuzziness: edit_distance, max_expansions: 3, analyzer: "searchkick_search"),
+                    shared_options.merge(fuzziness: edit_distance, max_expansions: 3, analyzer: "searchkick_search2")
                   ]
                 end
               elsif field.end_with?(".exact")
@@ -414,7 +414,7 @@ module Searchkick
 
           raise UnsupportedVersionError, "This version of Searchkick requires Elasticsearch 1.0 or greater"
         elsif status_code == 400
-          if e.message.include?("[multi_match] analyzer [indonesian_with_shingle] not found")
+          if e.message.include?("[multi_match] analyzer [searchkick_search] not found")
             raise InvalidQueryError, "Bad mapping - run #{searchkick_klass.name}.reindex"
           else
             raise InvalidQueryError, e.message

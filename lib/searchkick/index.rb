@@ -279,16 +279,6 @@ module Searchkick
                 type: "custom",
                 tokenizer: "standard",
                 filter: ["lowercase", "asciifolding", "reverse", "searchkick_edge_ngram", "reverse"]
-              },
-              indonesian_with_shingle: {
-                type: "custom",
-                tokenizer: "standard",
-                filter: ["standard", "lowercase", "asciifolding", "searchkick_search_shingle", "indonesian_stemmer"]
-              },
-              indonesian: {
-                type: "custom",
-                tokenizer: "standard",
-                filter: ["standard", "lowercase", "asciifolding", "indonesian_stemmer"]
               }
             },
             filter: {
@@ -320,10 +310,6 @@ module Searchkick
               searchkick_stemmer: {
                 type: "snowball",
                 language: options[:language] || "English"
-              },
-              indonesian_stemmer: {
-                type: "stemmer",
-                language: "indonesian"
               }
             },
             tokenizer: {
@@ -550,5 +536,6 @@ module Searchkick
         obj
       end
     end
+
   end
 end
