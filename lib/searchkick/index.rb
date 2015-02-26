@@ -96,8 +96,8 @@ module Searchkick
     end
 
     def similar_record(record, options = {})
-      like_text = retrieve(record).to_hash
-        .keep_if{|k,v| !options[:fields] || options[:fields].map(&:to_s).include?(k) }
+      like_text = record.search_data
+        .keep_if{|k,v| !options[:fields] || options[:fields].include?(k) }
         .values.compact.join(" ")
 
       # TODO deep merge method
