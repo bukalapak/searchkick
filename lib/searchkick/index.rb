@@ -212,6 +212,11 @@ module Searchkick
                 tokenizer: "keyword",
                 filter: ["lowercase"] + (options[:stem_conversions] == false ? [] : ["searchkick_stemmer"])
               },
+              searchkick_keyword_nostem: {
+                type: "custom",
+                tokenizer: "keyword",
+                filter: ["lowercase"]
+              },
               default_index: {
                 type: "custom",
                 tokenizer: "standard",
@@ -222,9 +227,19 @@ module Searchkick
               searchkick_search: {
                 type: "custom",
                 tokenizer: "standard",
-                filter: ["standard", "lowercase", "asciifolding", "searchkick_search_shingle"]
+                filter: ["standard", "lowercase", "asciifolding", "searchkick_search_shingle", "searchkick_stemmer"]
               },
               searchkick_search2: {
+                type: "custom",
+                tokenizer: "standard",
+                filter: ["standard", "lowercase", "asciifolding", "searchkick_stemmer"]
+              },
+              searchkick_search_nostem: {
+                type: "custom",
+                tokenizer: "standard",
+                filter: ["standard", "lowercase", "asciifolding", "searchkick_search_shingle"]
+              },
+              searchkick_search2_nostem: {
                 type: "custom",
                 tokenizer: "standard",
                 filter: ["standard", "lowercase", "asciifolding"]
@@ -372,7 +387,7 @@ module Searchkick
           mapping[:conversions] = {
             type: "nested",
             properties: {
-              query: {type: "string", analyzer: "searchkick_keyword"},
+              query: {type: "string", analyzer: "searchkick_keyword_nostem"},
               count: {type: "integer"}
             }
           }
