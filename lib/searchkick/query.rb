@@ -1,7 +1,7 @@
 module Searchkick
   class Query
     attr_reader :klass, :term, :options
-    attr_accessor :body
+    attr_accessor :body, :sfields
 
     def initialize(klass, term, options = {})
       if term.is_a?(Hash)
@@ -39,6 +39,11 @@ module Searchkick
             ["_all"]
           end
         end
+
+      @sfields = fields
+      @sfields = @sfields.map do |p|
+        boost_fields[p] ? "#{p}^#{boost_fields[p]}" : p
+      end
 
       operator = options[:operator] || (options[:partial] ? "or" : "and")
 
@@ -87,40 +92,53 @@ module Searchkick
               }
             }
           else
-            queries = []
-            fields.each do |field|
-              qs = []
-
-              factor = boost_fields[field] || 1
-              shared_options = {
-                query: term,
-                operator: operator,
-                boost: factor
+            queries = [
+              {
+                multi_match:{
+                  query: term,
+                  type: "cross_fields",
+                  fields: @sfields,
+                  operator: "and",
+                  boost: options[:fuzziness_factor] || 10,
+                  analyzer: "searchkick_search"
+                }
+              },
+              {
+                multi_match:{
+                  query: term,
+                  type: "cross_fields",
+                  fields: @sfields,
+                  operator: "and",
+                  boost: options[:fuzziness_factor] || 10,
+                  analyzer: "searchkick_search2"
+                }
               }
-
-              if field == "_all" or field.end_with?(".analyzed")
-                shared_options[:cutoff_frequency] = 0.001 unless operator == "and"
-                qs.concat [
-                  shared_options.merge(boost: 10 * factor, analyzer: "searchkick_search"),
-                  shared_options.merge(boost: 10 * factor, analyzer: "searchkick_search2")
-                ]
-                misspellings = options.has_key?(:misspellings) ? options[:misspellings] : options[:mispellings] # why not?
-                if misspellings != false
-                  edit_distance = (misspellings.is_a?(Hash) && (misspellings[:edit_distance] || misspellings[:distance])) || 1
-                  qs.concat [
-                    shared_options.merge(fuzziness: edit_distance, max_expansions: 3, analyzer: "searchkick_search"),
-                    shared_options.merge(fuzziness: edit_distance, max_expansions: 3, analyzer: "searchkick_search2")
-                  ]
-                end
-              elsif field.end_with?(".exact")
-                f = field.split(".")[0..-2].join(".")
-                queries << {match: {f => shared_options.merge(analyzer: "keyword")}}
-              else
-                analyzer = field.match(/\.word_(start|middle|end)\z/) ? "searchkick_word_search" : "searchkick_autocomplete_search"
-                qs << shared_options.merge(analyzer: analyzer)
-              end
-
-              queries.concat(qs.map{|q| {match: {field => q}} })
+            ]
+            misspellings = options.has_key?(:misspellings) ? options[:misspellings] : options[:mispellings]
+            edit_distance = (misspellings.is_a?(Hash) && (misspellings[:edit_distance] || misspellings[:distance])) || 1 if misspellings != false
+            if edit_distance && edit_distance > 0
+              queries << {
+                multi_match:{
+                  query: term,
+                  type: "best_fields",
+                  fields: @sfields,
+                  operator: "and",
+                  fuzziness: edit_distance,
+                  max_expansions: 100,
+                  analyzer: "searchkick_search"
+                }
+              }
+              queries << {
+                multi_match:{
+                  query: term,
+                  type: "best_fields",
+                  fields: @sfields,
+                  operator: "and",
+                  fuzziness: edit_distance,
+                  max_expansions: 100,
+                  analyzer: "searchkick_search2"
+                }
+              }
             end
 
             payload = {
@@ -130,13 +148,15 @@ module Searchkick
             }
           end
 
-          if conversions_field and options[:conversions] != false
+          if options[:relevance] && options[:relevance][:on] && conversions_field && options[:conversions] != false
             # wrap payload in a bool query
+
+            config = options[:relevance]
             script_score =
               if below12
                 {script_score: {script: "doc['count'].value"}}
               else
-                {field_value_factor: {field: "count"}}
+                {field_value_factor: {field: "count", factor: config[:factor], modifier:config[:modifier]}}
               end
 
             payload = {
@@ -145,10 +165,10 @@ module Searchkick
                 should: {
                   nested: {
                     path: conversions_field,
-                    score_mode: "total",
+                    score_mode: config[:score_mode],
                     query: {
                       function_score: {
-                        boost_mode: "replace",
+                        boost_mode: config[:boost_mode],
                         query: {
                           match: {
                             query: term
@@ -164,6 +184,56 @@ module Searchkick
         end
 
         custom_filters = []
+
+        unless below12
+          refine_boost = options[:refine_boost] || {}
+
+          refine_boost.each do |field, value|
+            value[:modifier] ||= "ln2p"
+            value[:factor] ||= 1
+
+            script_score =
+              {field_value_factor: {field: field, factor: value[:factor].to_f, modifier: value[:modifier]}}
+              # {script_score: {
+              #   script: "3/(1+(DateTime.now().getMillis() - doc['#{decay}'].date.getMillis())/86400000) \
+              #     < 0.013574660633484163 ? 0 : doc['#{field}'].value*(3/(1+(DateTime.now().getMillis() - \
+              #     doc['#{decay}'].date.getMillis())/86400000)-0.013574660633484163)"}
+            script_score.merge!({weight: value[:weight]}) if value[:weight]
+
+            custom_filters << {
+              filter: {
+                exists: {
+                  field: field
+                }
+              }
+            }.merge(script_score)
+          end
+
+          decay = options[:decay] || {}
+
+          decay.each do |field,value|
+            decay = {scale: value[:scale]}
+            decay.merge!({origin: value[:origin]}) if value[:origin]
+            decay.merge!({offset: value[:offset]}) if value[:offset]
+            decay.merge!({decay: value[:decay]}) if value[:decay]
+
+            value[:function] ||= :gauss
+            script_score = {value[:function] => {field=>decay}}
+            script_score.merge!({weight: value[:weight]}) if value[:weight]
+
+            custom_filters << {
+              filter: {
+                exists: {
+                  field: field
+                }
+              }
+            }.merge(script_score)
+          end
+
+          if options[:random]
+            custom_filters << {:random_score=>{:seed=>DateTime.now.to_i/3600}}
+          end
+        end
 
         boost_by = options[:boost_by] || {}
         if boost_by.is_a?(Array)
@@ -228,11 +298,14 @@ module Searchkick
         end
 
         if custom_filters.any?
+          options[:score_mode] ||= "multiply"
+          options[:boost_mode] ||= "multiply"
           payload = {
             function_score: {
               functions: custom_filters,
               query: payload,
-              score_mode: "sum"
+              score_mode: options[:score_mode],
+              boost_mode: options[:boost_mode]
             }
           }
         end
@@ -254,8 +327,13 @@ module Searchkick
         # filters
         filters = where_filters(options[:where])
         if filters.any?
-          payload[:filter] = {
-            and: filters
+          payload[:query] = {
+            filtered:{
+              query: payload[:query],
+              filter:{
+                bool: { must: filters }
+              }
+            }
           }
         end
 
@@ -309,6 +387,24 @@ module Searchkick
                 }
               }
             end
+          end
+        end
+
+        if options[:aggs]
+          aggs = options[:aggs]
+          if aggs.is_a?(Array) # convert to more advanced syntax
+            aggs = Hash[ aggs.map{|f| [f, {}] } ]
+          end
+
+          payload[:aggs] = {}
+          aggs.each do |field, agg_options|
+            size = agg_options[:limit] ? agg_options[:limit] + 150 : 100000
+            payload[:aggs][field] = {
+              terms:{
+                field:field,
+                size:size
+              }
+            }
           end
         end
 
@@ -399,8 +495,10 @@ module Searchkick
     end
 
     def execute
+      # wew = params.merge!({explain:true})
       begin
         response = Searchkick.client.search(params)
+        # response = Searchkick.client.search(wew)
       rescue => e # TODO rescue type
         status_code = e.message[1..3].to_i
         if status_code == 404
@@ -439,7 +537,8 @@ module Searchkick
         padding: @padding,
         load: @load,
         includes: options[:include] || options[:includes],
-        json: !options[:json].nil?
+        json: !options[:json].nil?,
+        unscoped: @options[:unscoped]
       }
       Searchkick::Results.new(searchkick_klass, response, opts)
     end
@@ -493,19 +592,7 @@ module Searchkick
               when :in
                 filters << term_filters(field, op_value)
               else
-                range_query =
-                  case op
-                  when :gt
-                    {from: op_value, include_lower: false}
-                  when :gte
-                    {from: op_value, include_lower: true}
-                  when :lt
-                    {to: op_value, include_upper: false}
-                  when :lte
-                    {to: op_value, include_upper: true}
-                  else
-                    raise "Unknown where operator"
-                  end
+                range_query = {op => op_value}
                 # issue 132
                 if existing = filters.find{ |f| f[:range] && f[:range][field] }
                   existing[:range][field].merge!(range_query)

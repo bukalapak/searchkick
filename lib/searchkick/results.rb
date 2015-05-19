@@ -140,7 +140,11 @@ module Searchkick
     def results_query(records, grouped_hits)
       if records.respond_to?(:primary_key) and records.primary_key
         # ActiveRecord
-        records.unscoped.where(records.primary_key => grouped_hits.map{|hit| hit["_id"] }).to_a
+        if @options[:unscoped]
+          records.unscoped.where(records.primary_key => grouped_hits.map{|hit| hit["_id"] }).to_a
+        else
+          records.where(records.primary_key => grouped_hits.map{|hit| hit["_id"] }).to_a
+        end
       elsif records.respond_to?(:all) and records.all.respond_to?(:for_ids)
         # Mongoid 2
         records.all.for_ids(grouped_hits.map{|hit| hit["_id"] }).to_a
