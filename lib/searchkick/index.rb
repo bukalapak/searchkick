@@ -98,7 +98,7 @@ module Searchkick
     def similar_record(record, options = {})
       like_text = record.search_data
         .keep_if{|k,v| !options[:fields] || options[:fields].include?(k) }
-        .values.compact.join(" ")
+        # .values.compact.join(" ")
 
       # TODO deep merge method
       options[:where] ||= {}
@@ -107,6 +107,9 @@ module Searchkick
       options[:limit] ||= 10
       options[:similar] = true
 
+      options[:like_text] = like_text
+      like_text = like_text.map{|k,v| "#{v}" }.compact.join(" ")
+      
       # TODO use index class instead of record class
       search_model(record.class, like_text, options)
     end

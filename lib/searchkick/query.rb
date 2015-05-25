@@ -69,13 +69,44 @@ module Searchkick
         if options[:query]
           payload = options[:query]
         elsif options[:similar]
+          similar_filters = []
+          options[:must_match].each do |field|
+            similar_filters << term_filters(field, options[:like_text][field])
+            options[:like_text].delete(field)
+          end
+          must_match = [
+            {
+              filtered: {
+                filter: similar_filters
+              }
+            }
+          ]
+
+          similar_fields = []
+          similar_terms = []
+          options[:like_text].each do |field,term|
+            if options[:fields].include?(field)
+              similar_fields << "#{field}.analyzed"
+              similar_terms << term
+            end
+          end
+          similar_terms = similar_terms.join(" ")
+          should_match = [
+            {
+              more_like_this: {
+                fields: similar_fields,
+                like_text: similar_terms,
+                min_doc_freq: 1,
+                min_term_freq: 1,
+                analyzer: "searchkick_search2"
+              }
+            }
+          ]
+
           payload = {
-            more_like_this: {
-              fields: fields,
-              like_text: term,
-              min_doc_freq: 1,
-              min_term_freq: 1,
-              analyzer: "searchkick_search2"
+            bool: {
+              must: must_match,
+              should: should_match
             }
           }
         elsif all
