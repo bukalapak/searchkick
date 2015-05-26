@@ -70,6 +70,7 @@ module Searchkick
           payload = options[:query]
         elsif options[:similar]
           similar_filters = []
+          options[:must_match] ||= []
           options[:must_match].each do |field|
             similar_filters << term_filters(field, options[:like_text][field])
             options[:like_text].delete(field)
