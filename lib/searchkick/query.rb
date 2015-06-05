@@ -99,7 +99,7 @@ module Searchkick
                 like_text: similar_terms,
                 min_doc_freq: 1,
                 min_term_freq: 1,
-                analyzer: "searchkick_search2"
+                analyzer: "searchkick_search2_nostem"
               }
             }
           ]
@@ -132,7 +132,7 @@ module Searchkick
                   fields: @sfields,
                   operator: "and",
                   boost: options[:fuzziness_factor] || 10,
-                  analyzer: "searchkick_search"
+                  analyzer: "searchkick_search_nostem"
                 }
               },
               {
@@ -142,7 +142,7 @@ module Searchkick
                   fields: @sfields,
                   operator: "and",
                   boost: options[:fuzziness_factor] || 10,
-                  analyzer: "searchkick_search2"
+                  analyzer: "searchkick_search2_nostem"
                 }
               }
             ]
@@ -157,7 +157,7 @@ module Searchkick
                   operator: "and",
                   fuzziness: edit_distance,
                   max_expansions: 100,
-                  analyzer: "searchkick_search"
+                  analyzer: "searchkick_search_nostem"
                 }
               }
               queries << {
@@ -168,7 +168,7 @@ module Searchkick
                   operator: "and",
                   fuzziness: edit_distance,
                   max_expansions: 100,
-                  analyzer: "searchkick_search2"
+                  analyzer: "searchkick_search2_nostem"
                 }
               }
             end
