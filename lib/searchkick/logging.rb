@@ -2,9 +2,9 @@
 
 module Searchkick
   class Query
-    def execute_with_instrumentation
+    def execute_with_instrumentation(count_only = false)
       event = {
-        name: "#{searchkick_klass.name} Search",
+        name: "#{searchkick_klass.name} #{count_only ? 'Count' : 'Search'}",
         query: params
       }
       ActiveSupport::Notifications.instrument("search.searchkick", event) do
