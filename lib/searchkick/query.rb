@@ -526,7 +526,7 @@ module Searchkick
       params
     end
 
-    def execute (count_only = false)
+    def execute(count_only = false)
       # wew = params.merge!({explain:true})
       begin
         if count_only
