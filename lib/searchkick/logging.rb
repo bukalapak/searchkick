@@ -7,8 +7,8 @@ module Searchkick
         name: "#{searchkick_klass.name} #{count_only ? 'Count' : 'Search'}",
         query: params
       }
-      ActiveSupport::Notifications.instrument("search.searchkick", event) do
-        execute_without_instrumentation
+      ActiveSupport::Notifications.instrument("#{count_only ? 'count' : 'search'}.searchkick", event) do
+        execute_without_instrumentation(count_only)
       end
     end
     alias_method_chain :execute, :instrumentation
