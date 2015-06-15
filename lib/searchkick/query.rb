@@ -526,10 +526,15 @@ module Searchkick
       params
     end
 
-    def execute
+    def execute (count_only = false)
       # wew = params.merge!({explain:true})
       begin
-        response = Searchkick.client.search(params)
+        if count_only
+          @body = {query: @body[:query]}
+          response = Searchkick.client.count(params)
+        else
+          response = Searchkick.client.search(params)
+        end
         # response = Searchkick.client.search(wew)
       rescue => e # TODO rescue type
         status_code = e.message[1..3].to_i
@@ -552,6 +557,10 @@ module Searchkick
         else
           raise e
         end
+      end
+
+      if count_only
+        return response["count"] rescue 0
       end
 
       # apply facet limit in client due to

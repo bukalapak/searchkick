@@ -21,6 +21,9 @@ module Searchkick
         define_singleton_method(Searchkick.search_method_name) do |term = nil, options={}, &block|
           searchkick_index.search_model(self, term, options, &block)
         end
+        define_singleton_method(Searchkick.count_method_name) do |term = nil, options={}|
+          searchkick_index.count_model(self, term, options)
+        end
         extend Searchkick::Reindex # legacy for Searchjoy
 
         class << self
