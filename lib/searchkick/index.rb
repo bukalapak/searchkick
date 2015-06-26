@@ -129,12 +129,7 @@ module Searchkick
     end
 
     def count_model(searchkick_klass, term = nil, options = {})
-      query = Searchkick::Query.new(searchkick_klass, term, options)
-      if options[:execute] == false
-        query
-      else
-        query.execute(true)
-      end
+      search_model(searchkick_klass, term, options.merge(search_type: "count"))
     end
 
     # reindex

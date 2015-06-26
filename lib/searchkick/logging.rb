@@ -2,13 +2,13 @@
 
 module Searchkick
   class Query
-    def execute_with_instrumentation(count_only = false)
+    def execute_with_instrumentation
       event = {
-        name: "#{searchkick_klass.name} #{count_only ? 'Count' : 'Search'}",
+        name: "#{searchkick_klass.name} #{@options[:search_type] == "count" ? 'Count' : 'Search'}",
         query: params
       }
-      ActiveSupport::Notifications.instrument("#{count_only ? 'count' : 'search'}.searchkick", event) do
-        execute_without_instrumentation(count_only)
+      ActiveSupport::Notifications.instrument("#{@options[:search_type] == "count" ? 'count' : 'search'}.searchkick", event) do
+        execute_without_instrumentation
       end
     end
     alias_method_chain :execute, :instrumentation

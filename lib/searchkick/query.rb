@@ -522,19 +522,17 @@ module Searchkick
         index: options[:index_name] || searchkick_index.name,
         body: body
       }
-      params.merge!(type: @type) if @type
-      params
+      params[:type] = @type if @type
+      params[:search_type] = options[:search_type] if options[:search_type].present?
+      params[:timeout] = options[:timeout] if options[:timeout].present?
+
+      return params
     end
 
-    def execute(count_only = false)
+    def execute
       # wew = params.merge!({explain:true})
       begin
-        if count_only
-          @body = {query: @body[:query]}
-          response = Searchkick.client.count(params)
-        else
-          response = Searchkick.client.search(params)
-        end
+        response = Searchkick.client.search(params)
         # response = Searchkick.client.search(wew)
       rescue => e # TODO rescue type
         status_code = e.message[1..3].to_i
@@ -559,10 +557,6 @@ module Searchkick
         end
       end
 
-      if count_only
-        return response["count"] rescue 0
-      end
-
       # apply facet limit in client due to
       # https://github.com/elasticsearch/elasticsearch/issues/1305
       @facet_limits.each do |field, limit|
@@ -581,7 +575,11 @@ module Searchkick
         json: !options[:json].nil?,
         unscoped: @options[:unscoped]
       }
-      Searchkick::Results.new(searchkick_klass, response, opts)
+      if options[:search_type] == "count"
+        return response["hits"]["total"] rescue 0
+      else
+        return Searchkick::Results.new(searchkick_klass, response, opts)
+      end
     end
 
     private
