@@ -7,7 +7,7 @@ module Searchkick
       return unless model.superclass == ActiveRecord::Base
       record = model.unscoped.where(id: id).first
       index = model.searchkick_index
-      index.store record if record
+      index.store record if record && record.should_index?
     end
 
   end

@@ -8,8 +8,10 @@ ENV["RACK_ENV"] = "test"
 
 Minitest::Test = Minitest::Unit::TestCase unless defined?(Minitest::Test)
 
-File.delete("elasticsearch.log") if File.exists?("elasticsearch.log")
+File.delete("elasticsearch.log") if File.exist?("elasticsearch.log")
 Searchkick.client.transport.logger = Logger.new("elasticsearch.log")
+
+puts "Running against Elasticsearch #{Searchkick.server_version}"
 
 I18n.config.enforce_available_locales = true
 
@@ -26,7 +28,7 @@ if defined?(Mongoid)
     module BSON
       class ObjectId
         def <=>(other)
-          self.data <=> other.data
+          data <=> other.data
         end
       end
     end
@@ -210,12 +212,15 @@ class Product
 end
 
 class Store
-  searchkick mappings: {
-    store: {
-      properties: {
-        name: {type: "string", analyzer: "keyword"}
+  searchkick \
+    routing: :name,
+    merge_mappings: true,
+    mappings: {
+      store: {
+        properties: {
+          name: {type: "string", analyzer: "keyword"},
+        }
       }
-    }
   }
 end
 
@@ -223,7 +228,7 @@ class Animal
   searchkick \
     autocomplete: [:name],
     suggest: [:name],
-    index_name: -> { "#{self.name.tableize}-#{Date.today.year}" }
+    index_name: -> { "#{name.tableize}-#{Date.today.year}" }
     # wordnet: true
 end
 
@@ -252,7 +257,7 @@ class Minitest::Test
   end
 
   def store_names(names, klass = Product)
-    store names.map{|name| {name: name} }, klass
+    store names.map { |name| {name: name} }, klass
   end
 
   # no order

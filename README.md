@@ -19,13 +19,13 @@ Plus:
 - easily personalize results for each user
 - autocomplete
 - “Did you mean” suggestions
-- works with ActiveRecord and Mongoid
+- works with ActiveRecord, Mongoid, and NoBrainer
 
 :speech_balloon: Get [handcrafted updates](http://chartkick.us7.list-manage.com/subscribe?u=952c861f99eb43084e0a49f98&id=6ea6541e8e&group[0][4]=true) for new features
 
-:tangerine: Battle-tested at [Instacart](https://www.instacart.com)
+:tangerine: Battle-tested at [Instacart](https://www.instacart.com/opensource)
 
-[![Build Status](https://travis-ci.org/ankane/searchkick.png?branch=master)](https://travis-ci.org/ankane/searchkick)
+[![Build Status](https://travis-ci.org/ankane/searchkick.svg?branch=master)](https://travis-ci.org/ankane/searchkick)
 
 We highly recommend tracking queries and conversions
 
@@ -96,6 +96,7 @@ where: {
   store_id: {not: 2},         # not
   aisle_id: {not: [25, 30]},  # not in
   user_ids: {all: [1, 3]},    # all elements in array
+  category: /frozen .+/,      # regexp
   or: [
     [{in_stock: true}, {backordered: true}]
   ]
@@ -606,7 +607,7 @@ Find similar items.
 
 ```ruby
 product = Product.first
-product.similar(fields: ["name"])
+product.similar(fields: ["name"], where: {size: "12 oz"})
 ```
 
 ### Geospatial Searches
@@ -645,6 +646,22 @@ Also supports [additional options](http://www.elasticsearch.org/guide/en/elastic
 
 ```ruby
 City.search "san", boost_by_distance: {field: :location, origin: [37, -122], function: :linear, scale: "30mi", decay: 0.5}
+```
+
+### Routing
+
+Searchkick supports [Elasticsearch’s routing feature](https://www.elastic.co/blog/customizing-your-document-routing).
+
+```ruby
+class Contact < ActiveRecord::Base
+  searchkick routing: :user_id
+end
+```
+
+Reindex and search with:
+
+```ruby
+Contact.search "John", routing: current_user.id
 ```
 
 ## Inheritance
@@ -849,6 +866,25 @@ product.reindex
 product.reindex_async
 ```
 
+Reindex more than one record without recreating the index
+
+```ruby
+# do this ...
+some_company.products.each { |p| p.reindex }
+# or this ...
+Product.searchkick_index.import(some_company.products)
+# don't do the following as it will recreate the index with some_company's products only
+some_company.products.reindex
+```
+
+Reindex large set of records in batches
+
+```ruby
+Product.where("id > 100000").find_in_batches do |batch|
+  Product.searchkick_index.import(batch)
+end
+```
+
 Remove old indices
 
 ```ruby
@@ -955,6 +991,34 @@ Reindex all models - Rails only
 rake searchkick:reindex:all
 ```
 
+## Large Data Sets
+
+For large data sets, check out [Keeping Elasticsearch in Sync](https://www.found.no/foundation/keeping-elasticsearch-in-sync/).  Searchkick will make this easy in the future.
+
+## Testing
+
+This section could use some love.
+
+### RSpec
+
+```ruby
+describe Product do
+  it "searches" do
+    Product.reindex
+    Product.searchkick_index.refresh # don't forget this
+    # test goes here...
+  end
+end
+```
+
+### Factory Girl
+
+```ruby
+product = FactoryGirl.create(:product)
+product.reindex # don't forget this
+Product.searchkick_index.refresh # or this
+```
+
 ## Migrating from Tire
 
 1. Change `search` methods to `tire.search` and add index name in existing search calls
@@ -1019,11 +1083,12 @@ Thanks to Karel Minarik for [Elasticsearch Ruby](https://github.com/elasticsearc
 
 ## Roadmap
 
+- More features for large data sets
+- Improve section on testing
 - Semantic search features
 - Search multiple fields for different terms
 - Search across models
 - Search nested objects
-- Add section on testing
 - Much finer customization
 
 ## Contributing
