@@ -1,7 +1,7 @@
 module Searchkick
   class Query
     attr_reader :klass, :term, :options
-    attr_accessor :body, :sfields
+    attr_accessor :body, :respond
 
     def initialize(klass, term, options = {})
       if term.is_a?(Hash)
@@ -532,7 +532,7 @@ module Searchkick
     def execute
       # wew = params.merge!({explain:true})
       begin
-        response = Searchkick.client.search(params)
+        response = @respond || Searchkick.client.search(params)
         # response = Searchkick.client.search(wew)
       rescue => e # TODO rescue type
         status_code = e.message[1..3].to_i
