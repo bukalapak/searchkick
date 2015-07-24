@@ -1,7 +1,7 @@
 module Searchkick
   class Query
     attr_reader :klass, :term, :options
-    attr_accessor :body, :sfields
+    attr_accessor :body
 
     def initialize(klass, term, options = {})
       if term.is_a?(Hash)
@@ -40,8 +40,8 @@ module Searchkick
           end
         end
 
-      @sfields = fields
-      @sfields = @sfields.map do |p|
+      sfields = fields
+      sfields = sfields.map do |p|
         boost_fields[p] ? "#{p}^#{boost_fields[p]}" : p
       end
 
@@ -129,7 +129,7 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: "cross_fields",
-                  fields: @sfields,
+                  fields: sfields,
                   operator: "and",
                   boost: options[:fuzziness_factor] || 10,
                   analyzer: "searchkick_search_nostem"
@@ -139,7 +139,7 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: "cross_fields",
-                  fields: @sfields,
+                  fields: sfields,
                   operator: "and",
                   boost: options[:fuzziness_factor] || 10,
                   analyzer: "searchkick_search2_nostem"
@@ -153,7 +153,7 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: "best_fields",
-                  fields: @sfields,
+                  fields: sfields,
                   operator: "and",
                   fuzziness: edit_distance,
                   max_expansions: 100,
@@ -164,7 +164,7 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: "best_fields",
-                  fields: @sfields,
+                  fields: sfields,
                   operator: "and",
                   fuzziness: edit_distance,
                   max_expansions: 100,
