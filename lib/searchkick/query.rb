@@ -575,11 +575,7 @@ module Searchkick
         json: !options[:json].nil?,
         unscoped: @options[:unscoped]
       }
-      if options[:search_type] == "count"
-        return response["hits"]["total"] rescue 0
-      else
-        return Searchkick::Results.new(searchkick_klass, response, opts)
-      end
+      return Searchkick::Results.new(searchkick_klass, response, opts)
     end
 
     private

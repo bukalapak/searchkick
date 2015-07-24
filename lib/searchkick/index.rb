@@ -129,7 +129,7 @@ module Searchkick
     end
 
     def count_model(searchkick_klass, term = nil, options = {})
-      search_model(searchkick_klass, term, options.merge(search_type: "count"))
+      search_model(searchkick_klass, term, options.merge(search_type: "count")).total_count
     end
 
     # reindex
