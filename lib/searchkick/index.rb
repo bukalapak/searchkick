@@ -133,7 +133,7 @@ module Searchkick
     end
 
     def msearch_model(searchkick_klass, args = [])
-      queries = args.map { |term, options| search_model(searchkick_klass, temp, options.merge(execute: false)) }
+      queries = args.map { |term, options| search_model(searchkick_klass, term, options.merge(execute: false)) }
       body = queries.map do |q|
         param = q.params
         param[:search] = param[:body]
