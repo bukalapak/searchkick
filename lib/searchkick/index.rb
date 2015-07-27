@@ -142,7 +142,7 @@ module Searchkick
       end
       responses = Searchkick.client.msearch(body: body)["responses"]
       result = []
-      for i in 0...queries.count
+      (0...queries.count).each do |i|
         queries[i].respond = responses[i]
         result << queries[i].execute
       end
