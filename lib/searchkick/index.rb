@@ -132,6 +132,23 @@ module Searchkick
       search_model(searchkick_klass, term, options.merge(search_type: "count")).total_count
     end
 
+    def msearch_model(searchkick_klass, args = [])
+      queries = args.map { |term, options| search_model(searchkick_klass, term, options.merge(execute: false)) }
+      body = queries.map do |q|
+        param = q.params
+        param[:search] = param[:body]
+        param[:search].merge!(timeout: param[:timeout]) if param[:timeout].present?
+        param.except(:body, :timeout)
+      end
+      responses = Searchkick.client.msearch(body: body)["responses"]
+      result = []
+      (0...queries.count).each do |i|
+        queries[i].respond = responses[i]
+        result << queries[i].execute
+      end
+      return result
+    end
+
     # reindex
 
     def create_index

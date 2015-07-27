@@ -26,6 +26,7 @@ module Searchkick
   class << self
     attr_accessor :callbacks
     attr_accessor :search_method_name
+    attr_accessor :msearch_method_name
     attr_accessor :count_method_name
     attr_accessor :wordnet_path
     attr_accessor :timeout
@@ -35,6 +36,7 @@ module Searchkick
   self.callbacks = true
   self.search_method_name = :search
   self.count_method_name = :search_count
+  self.msearch_method_name = :msearch
   self.wordnet_path = "/var/lib/wn_s.pl"
   self.timeout = 5
   self.open_timeout = 5
