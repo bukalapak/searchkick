@@ -440,6 +440,16 @@ module Searchkick
           end
         end
 
+        # stats
+        if options[:stat_aggs]
+          payload[:aggs] ||= {}
+          payload[:aggs][:price_stats] = {
+            stats:{
+              field:"price"
+            }
+          }
+        end
+
         # suggestions
         if options[:suggest]
           suggest_fields = (searchkick_options[:suggest] || []).map(&:to_s)
@@ -504,7 +514,6 @@ module Searchkick
       @padding = padding
       @load = load
     end
-
     def searchkick_index
       klass.searchkick_index
     end
