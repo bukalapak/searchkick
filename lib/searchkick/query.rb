@@ -442,12 +442,19 @@ module Searchkick
 
         # stats
         if options[:stat_aggs]
+          aggs = options[:stat_aggs]
+          if aggs.is_a?(Array) # convert to more advanced syntax
+            aggs = Hash[ aggs.map{|f| [f, {}] } ]
+          end
+
           payload[:aggs] ||= {}
-          payload[:aggs][:price_stats] = {
-            stats:{
-              field:"price"
+          options[:stat_aggs].each do |name, field|
+            payload[:aggs][name] = {
+              stats: {
+                field: field
+              }
             }
-          }
+          end
         end
 
         # suggestions
