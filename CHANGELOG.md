@@ -1,9 +1,22 @@
-## 0.8.6 [unreleased]
+## 0.9.0
+
+- Much better performance for where queries if no facets
+- Added basic support for regex
+- Added support for routing
+- Made `Searchkick.disable_callbacks` thread-safe
+
+## 0.8.7
+
+- Fixed Mongoid import
+
+## 0.8.6
 
 - Added support for NoBrainer
 - Added `stem_conversions: false` option
-- Fixed suggestions with partial match boost
 - Added support for multiple `boost_where` values on the same field
+- Added support for array of values for `boost_where`
+- Fixed suggestions with partial match boost
+- Fixed redefining existing instance methods in models
 
 ## 0.8.5
 
