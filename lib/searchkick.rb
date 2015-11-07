@@ -19,9 +19,11 @@ end
 require "searchkick/reindex_v2_job" if defined?(ActiveJob)
 
 module Searchkick
-  class MissingIndexError < StandardError; end
-  class UnsupportedVersionError < StandardError; end
+  class Error < StandardError; end
+  class MissingIndexError < Error; end
+  class UnsupportedVersionError < Error; end
   class InvalidQueryError < Elasticsearch::Transport::Transport::Errors::BadRequest; end
+  class ImportError < Error; end
 
   class << self
     attr_accessor :search_method_name
