@@ -521,6 +521,7 @@ module Searchkick
       @padding = padding
       @load = load
     end
+
     def searchkick_index
       klass.searchkick_index
     end
@@ -669,6 +670,8 @@ module Searchkick
         end
       elsif value.nil?
         {missing: {"field" => field, existence: true, null_value: true}}
+      elsif value.is_a?(Regexp)
+        {regexp: {field => {value: value.source}}}
       else
         {term: {field => value}}
       end
