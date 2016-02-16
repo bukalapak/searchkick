@@ -1,7 +1,6 @@
 require_relative "test_helper"
 
-class TestSynonyms < Minitest::Test
-
+class SynonymsTest < Minitest::Test
   def test_bleach
     store_names ["Clorox Bleach", "Kroger Bleach"]
     assert_search "clorox", ["Clorox Bleach", "Kroger Bleach"]
@@ -42,9 +41,14 @@ class TestSynonyms < Minitest::Test
     assert_search "scallions", ["Green Onions"]
   end
 
-  # def test_wordnet
-  #   store_names ["Creature", "Beast", "Dragon"], Animal
-  #   assert_search "animal", ["Creature", "Beast"], {}, Animal
-  # end
+  def test_word_start
+    store_names ["Clorox Bleach", "Kroger Bleach"]
+    assert_search "clorox", ["Clorox Bleach", "Kroger Bleach"], fields: [{name: :word_start}]
+  end
 
+  def test_wordnet
+    skip unless ENV["TEST_WORDNET"]
+    store_names ["Creature", "Beast", "Dragon"], Animal
+    assert_search "animal", ["Creature", "Beast"], {}, Animal
+  end
 end

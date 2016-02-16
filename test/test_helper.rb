@@ -3,30 +3,48 @@ Bundler.require(:default)
 require "minitest/autorun"
 require "minitest/pride"
 require "logger"
+require "active_support/core_ext" if defined?(NoBrainer)
 
 ENV["RACK_ENV"] = "test"
 
 Minitest::Test = Minitest::Unit::TestCase unless defined?(Minitest::Test)
 
-File.delete("elasticsearch.log") if File.exists?("elasticsearch.log")
+File.delete("elasticsearch.log") if File.exist?("elasticsearch.log")
 Searchkick.client.transport.logger = Logger.new("elasticsearch.log")
+Searchkick.search_timeout = 5
+
+puts "Running against Elasticsearch #{Searchkick.server_version}"
 
 I18n.config.enforce_available_locales = true
 
 ActiveJob::Base.logger = nil if defined?(ActiveJob)
 
-if defined?(Mongoid)
+def elasticsearch2?
+  Searchkick.server_version.starts_with?("2.")
+end
 
-  def mongoid2?
-    Mongoid::VERSION.starts_with?("2.")
-  end
+def mongoid2?
+  defined?(Mongoid) && Mongoid::VERSION.starts_with?("2.")
+end
+
+def nobrainer?
+  defined?(NoBrainer)
+end
+
+def activerecord_below41?
+  defined?(ActiveRecord) && Gem::Version.new(ActiveRecord::VERSION::STRING) < Gem::Version.new("4.1.0")
+end
+
+if defined?(Mongoid)
+  Mongoid.logger.level = Logger::INFO
+  Mongo::Logger.logger.level = Logger::INFO if defined?(Mongo::Logger)
 
   if mongoid2?
     # enable comparison of BSON::ObjectIds
     module BSON
       class ObjectId
         def <=>(other)
-          self.data <=> other.data
+          data <=> other.data
         end
       end
     end
@@ -49,15 +67,18 @@ if defined?(Mongoid)
     field :in_stock, type: Boolean
     field :backordered, type: Boolean
     field :orders_count, type: Integer
+    field :found_rate, type: BigDecimal
     field :price, type: Integer
     field :color
     field :latitude, type: BigDecimal
     field :longitude, type: BigDecimal
     field :description
+    field :alt_description
   end
 
   class Store
     include Mongoid::Document
+    has_many :products
 
     field :name
   end
@@ -83,27 +104,33 @@ elsif defined?(NoBrainer)
     include NoBrainer::Document
     include NoBrainer::Document::Timestamps
 
+    field :id,           type: Object
     field :name,         type: String
-    field :store_id,     type: Integer
     field :in_stock,     type: Boolean
     field :backordered,  type: Boolean
     field :orders_count, type: Integer
+    field :found_rate
     field :price,        type: Integer
     field :color,        type: String
     field :latitude
     field :longitude
-    field :description,  type: String
+    field :description, type: String
+    field :alt_description, type: String
+
+    belongs_to :store, validates: false
   end
 
   class Store
     include NoBrainer::Document
 
+    field :id,   type: Object
     field :name, type: String
   end
 
   class Animal
     include NoBrainer::Document
 
+    field :id,   type: Object
     field :name, type: String
   end
 
@@ -133,11 +160,13 @@ else
     t.boolean :in_stock
     t.boolean :backordered
     t.integer :orders_count
+    t.decimal :found_rate
     t.integer :price
     t.string :color
     t.decimal :latitude, precision: 10, scale: 7
     t.decimal :longitude, precision: 10, scale: 7
     t.text :description
+    t.text :alt_description
     t.timestamps null: true
   end
 
@@ -154,6 +183,7 @@ else
   end
 
   class Store < ActiveRecord::Base
+    has_many :products
   end
 
   class Animal < ActiveRecord::Base
@@ -190,7 +220,10 @@ class Product
     word_middle: [:name],
     word_end: [:name],
     highlight: [:name],
-    unsearchable: [:description]
+    # unsearchable: [:description],
+    searchable: [:name, :color],
+    only_analyzed: [:alt_description],
+    match: ENV["MATCH"] ? ENV["MATCH"].to_sym : nil
 
   attr_accessor :conversions, :user_ids, :aisle
 
@@ -198,8 +231,8 @@ class Product
     serializable_hash.except("id").merge(
       conversions: conversions,
       user_ids: user_ids,
-      location: [latitude, longitude],
-      multiple_locations: [[latitude, longitude], [0, 0]],
+      location: {lat: latitude, lon: longitude},
+      multiple_locations: [{lat: latitude, lon: longitude}, {lat: 0, lon: 0}],
       aisle: aisle
     )
   end
@@ -210,32 +243,43 @@ class Product
 end
 
 class Store
-  searchkick mappings: {
-    store: {
-      properties: {
-        name: {type: "string", analyzer: "keyword"}
+  searchkick \
+    routing: true,
+    merge_mappings: true,
+    mappings: {
+      store: {
+        properties: {
+          name: {type: "string", analyzer: "keyword"}
+        }
       }
     }
-  }
+
+  def search_id
+    id
+  end
+
+  def search_routing
+    name
+  end
 end
 
 class Animal
   searchkick \
     autocomplete: [:name],
     suggest: [:name],
-    index_name: -> { "#{self.name.tableize}-#{Date.today.year}" }
+    index_name: -> { "#{name.tableize}-#{Date.today.year}" }
     # wordnet: true
 end
 
 Product.searchkick_index.delete if Product.searchkick_index.exists?
 Product.reindex
 Product.reindex # run twice for both index paths
+Product.create!(name: "Set mapping")
 
 Store.reindex
 Animal.reindex
 
 class Minitest::Test
-
   def setup
     Product.destroy_all
     Store.destroy_all
@@ -252,7 +296,7 @@ class Minitest::Test
   end
 
   def store_names(names, klass = Product)
-    store names.map{|name| {name: name} }, klass
+    store names.map { |name| {name: name} }, klass
   end
 
   # no order
@@ -267,5 +311,4 @@ class Minitest::Test
   def assert_first(term, expected, options = {}, klass = Product)
     assert_equal expected, klass.search(term, options).map(&:name).first
   end
-
 end

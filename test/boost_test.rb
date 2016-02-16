@@ -1,7 +1,6 @@
 require_relative "test_helper"
 
-class TestBoost < Minitest::Test
-
+class BoostTest < Minitest::Test
   # conversions
 
   def test_conversions
@@ -75,6 +74,14 @@ class TestBoost < Minitest::Test
     assert_order "red", ["Red", "White"], fields: ["name^10", "color"]
   end
 
+  def test_boost_fields_decimal
+    store [
+      {name: "Red", color: "White"},
+      {name: "White", color: "Red Red Red"}
+    ]
+    assert_order "red", ["Red", "White"], fields: ["name^10.5", "color"]
+  end
+
   def test_boost_fields_word_start
     store [
       {name: "Red", color: "White"},
@@ -93,6 +100,16 @@ class TestBoost < Minitest::Test
     assert_order "tomato", ["Tomato C", "Tomato B", "Tomato A"], boost_by: {orders_count: {factor: 10}}
   end
 
+  def test_boost_by_boost_mode_multiply
+    store [
+      {name: "Tomato A", found_rate: 0.9},
+      {name: "Tomato B"},
+      {name: "Tomato C", found_rate: 0.5}
+    ]
+
+    assert_order "tomato", ["Tomato B", "Tomato A", "Tomato C"], boost_by: {found_rate: {boost_mode: "multiply"}}
+  end
+
   def test_boost_where
     store [
       {name: "Tomato A"},
@@ -100,7 +117,10 @@ class TestBoost < Minitest::Test
       {name: "Tomato C", user_ids: [3]}
     ]
     assert_first "tomato", "Tomato B", boost_where: {user_ids: 2}
+    assert_first "tomato", "Tomato B", boost_where: {user_ids: 1..2}
+    assert_first "tomato", "Tomato B", boost_where: {user_ids: [1, 4]}
     assert_first "tomato", "Tomato B", boost_where: {user_ids: {value: 2, factor: 10}}
+    assert_first "tomato", "Tomato B", boost_where: {user_ids: {value: [1, 4], factor: 10}}
     assert_order "tomato", ["Tomato C", "Tomato B", "Tomato A"], boost_where: {user_ids: [{value: 1, factor: 10}, {value: 3, factor: 20}]}
   end
 
@@ -113,4 +133,12 @@ class TestBoost < Minitest::Test
     assert_order "san", ["San Francisco", "San Antonio", "San Marino"], boost_by_distance: {field: :location, origin: [37, -122], scale: "1000mi"}
   end
 
+  def test_boost_by_distance_hash
+    store [
+      {name: "San Francisco", latitude: 37.7833, longitude: -122.4167},
+      {name: "San Antonio", latitude: 29.4167, longitude: -98.5000},
+      {name: "San Marino", latitude: 43.9333, longitude: 12.4667}
+    ]
+    assert_order "san", ["San Francisco", "San Antonio", "San Marino"], boost_by_distance: {field: :location, origin: {lat: 37, lon: -122}, scale: "1000mi"}
+  end
 end

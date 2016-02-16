@@ -1,7 +1,6 @@
 require_relative "test_helper"
 
-class TestModel < Minitest::Test
-
+class ModelTest < Minitest::Test
   def test_disable_callbacks_model
     store_names ["product a"]
 
@@ -18,6 +17,9 @@ class TestModel < Minitest::Test
   end
 
   def test_disable_callbacks_global
+    # make sure callbacks default to on
+    assert Searchkick.callbacks?
+
     store_names ["product a"]
 
     Searchkick.disable_callbacks
@@ -32,4 +34,9 @@ class TestModel < Minitest::Test
     assert_search "product", ["product a", "product b"]
   end
 
+  def test_multiple_models
+    store_names ["Product A"]
+    store_names ["Product B"], Store
+    assert_equal Product.all + Store.all, Searchkick.search("product", index_name: [Product, Store], order: "name").to_a
+  end
 end
