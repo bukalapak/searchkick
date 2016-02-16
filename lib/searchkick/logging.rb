@@ -1,54 +1,51 @@
 # based on https://gist.github.com/mnutt/566725
 
 module Searchkick
-  class Query
-    def execute_with_instrumentation
+  module QueryWithInstrumentation
+    def execute_search
       event = {
         name: "#{searchkick_klass.name} #{@options[:search_type] == "count" ? 'Count' : 'Search'}",
         query: params
       }
       ActiveSupport::Notifications.instrument("#{@options[:search_type] == "count" ? 'count' : 'search'}.searchkick", event) do
-        execute_without_instrumentation
+        super
       end
     end
-    alias_method_chain :execute, :instrumentation
   end
 
-  class Index
-    def store_with_instrumentation(record)
+  module IndexWithInstrumentation
+    def store(record)
       event = {
         name: "#{record.searchkick_klass.name} Store",
         id: search_id(record)
       }
       ActiveSupport::Notifications.instrument("request.searchkick", event) do
-        store_without_instrumentation(record)
+        super(record)
       end
     end
-    alias_method_chain :store, :instrumentation
 
-    def remove_with_instrumentation(record)
+
+    def remove(record)
       event = {
         name: "#{record.searchkick_klass.name} Remove",
         id: search_id(record)
       }
       ActiveSupport::Notifications.instrument("request.searchkick", event) do
-        remove_without_instrumentation(record)
+        super(record)
       end
     end
-    alias_method_chain :remove, :instrumentation
 
-    def import_with_instrumentation(records)
+    def import(records)
       if records.any?
         event = {
           name: "#{records.first.searchkick_klass.name} Import",
           count: records.size
         }
         ActiveSupport::Notifications.instrument("request.searchkick", event) do
-          import_without_instrumentation(records)
+          super(records)
         end
       end
     end
-    alias_method_chain :import, :instrumentation
   end
 
   # https://github.com/rails/rails/blob/master/activerecord/lib/active_record/log_subscriber.rb
@@ -62,7 +59,8 @@ module Searchkick
     end
 
     def self.reset_runtime
-      rt, self.runtime = runtime, 0
+      rt = runtime
+      self.runtime = 0
       rt
     end
 
@@ -77,7 +75,7 @@ module Searchkick
 
       # no easy way to tell which host the client will use
       host = Searchkick.client.transport.hosts.first
-      debug "  #{color(name, YELLOW, true)}  curl #{host[:protocol]}://#{host[:host]}:#{host[:port]}/#{CGI.escape(index)}#{type ? "/#{type.map{|t| CGI.escape(t) }.join(",")}" : ""}/_search?pretty -d '#{payload[:query][:body].to_json}'"
+      debug "  #{color(name, YELLOW, true)}  curl #{host[:protocol]}://#{host[:host]}:#{host[:port]}/#{CGI.escape(index)}#{type ? "/#{type.map { |t| CGI.escape(t) }.join(',')}" : ''}/_search?pretty -d '#{payload[:query][:body].to_json}'"
     end
 
     def request(event)
@@ -122,14 +120,16 @@ module Searchkick
 
     module ClassMethods
       def log_process_action(payload)
-        messages, runtime = super, payload[:searchkick_runtime]
+        messages = super
+        runtime = payload[:searchkick_runtime]
         messages << ("Searchkick: %.1fms" % runtime.to_f) if runtime.to_f > 0
         messages
       end
     end
   end
 end
-
+Searchkick::Query.send(:prepend, Searchkick::QueryWithInstrumentation)
+Searchkick::Index.send(:prepend, Searchkick::IndexWithInstrumentation)
 Searchkick::LogSubscriber.attach_to :searchkick
 ActiveSupport.on_load(:action_controller) do
   include Searchkick::ControllerRuntime

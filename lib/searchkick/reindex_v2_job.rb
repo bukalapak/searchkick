@@ -9,6 +9,5 @@ module Searchkick
       index = model.searchkick_index
       index.store record if record
     end
-
   end
 end
