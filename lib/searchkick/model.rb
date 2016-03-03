@@ -23,6 +23,11 @@ module Searchkick
           end
           alias_method Searchkick.search_method_name, :searchkick_search if Searchkick.search_method_name
 
+          def searchkick_count(term = nil, options = {})
+            searchkick_search(term, options.merge(per_page: 0))
+          end
+          alias_method Searchkick.count_method_name, :searchkick_count if Searchkick.count_method_name
+
           # should be removed after blweb uses Searchkick.multi_search directly
           def searchkick_msearch(args = [])
             queries = args.map { |term, options| searchkick_search(term, options.merge(execute: false)) }
