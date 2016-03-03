@@ -23,6 +23,14 @@ module Searchkick
           end
           alias_method Searchkick.search_method_name, :searchkick_search if Searchkick.search_method_name
 
+          # should be removed after blweb uses Searchkick.multi_search directly
+          def searchkick_msearch(args = [])
+            queries = args.map { |term, options| searchkick_search(term, options.merge(execute: false)) }
+            Searchkick.multi_search(queries)
+            queries.map(&:execute)
+          end
+          alias_method Searchkick.msearch_method_name, :searchkick_msearch if Searchkick.msearch_method_name
+
           def searchkick_index
             index = class_variable_get :@@searchkick_index
             index = index.call if index.respond_to? :call

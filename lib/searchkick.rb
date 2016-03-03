@@ -28,10 +28,11 @@ module Searchkick
   class ImportError < Error; end
 
   class << self
-    attr_accessor :search_method_name, :wordnet_path, :timeout, :models
+    attr_accessor :search_method_name, :wordnet_path, :timeout, :models, :msearch_method_name
     attr_writer :client, :env, :search_timeout
   end
   self.search_method_name = :search
+  self.msearch_method_name = :msearch
   self.wordnet_path = "/var/lib/wn_s.pl"
   self.timeout = 10
   self.models = []
