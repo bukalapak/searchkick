@@ -1,7 +1,6 @@
 require_relative "test_helper"
 
-class TestIndex < Minitest::Test
-
+class IndexTest < Minitest::Test
   def test_clean_indices
     old_index = Searchkick::Index.new("products_test_20130801000000000")
     different_index = Searchkick::Index.new("items_test_20130801000000000")
@@ -75,37 +74,47 @@ class TestIndex < Minitest::Test
   def test_bad_mapping
     Product.searchkick_index.delete
     store_names ["Product A"]
-    assert_raises(Searchkick::InvalidQueryError){ Product.search "test" }
+    assert_raises(Searchkick::InvalidQueryError) { Product.search "test" }
+  ensure
+    Product.reindex
+  end
+
+  def test_remove_blank_id
+    store_names ["Product A"]
+    Product.searchkick_index.remove(OpenStruct.new)
+    assert_search "product", ["Product A"]
   ensure
     Product.reindex
   end
 
   def test_missing_index
-    assert_raises(Searchkick::MissingIndexError){ Product.search "test", index_name: "not_found" }
+    assert_raises(Searchkick::MissingIndexError) { Product.search "test", index_name: "not_found" }
   end
 
   def test_unsupported_version
-    raises_exception = lambda { |s| raise Elasticsearch::Transport::Transport::Error.new("[500] No query registered for [multi_match]") }
+    raises_exception = ->(_) { raise Elasticsearch::Transport::Transport::Error.new("[500] No query registered for [multi_match]") }
     Searchkick.client.stub :search, raises_exception do
-      assert_raises(Searchkick::UnsupportedVersionError){ Product.search("test") }
+      assert_raises(Searchkick::UnsupportedVersionError) { Product.search("test") }
     end
   end
 
   def test_invalid_query
-    assert_raises(Searchkick::InvalidQueryError){ Product.search(query: {}) }
+    assert_raises(Searchkick::InvalidQueryError) { Product.search(query: {boom: true}) }
   end
 
-  if defined?(ActiveRecord)
-
-    def test_transaction
-      Product.transaction do
-        store_names ["Product A"]
-        raise ActiveRecord::Rollback
-      end
-
-      assert_search "product", []
+  def test_transaction
+    skip unless defined?(ActiveRecord)
+    Product.transaction do
+      store_names ["Product A"]
+      raise ActiveRecord::Rollback
     end
-
+    assert_search "product", []
   end
 
+  def test_analyzed_only
+    skip if nobrainer?
+    large_value = 10000.times.map { "hello" }.join(" ")
+    store [{name: "Product A", alt_description: large_value}]
+    assert_search "product", ["Product A"]
+  end
 end

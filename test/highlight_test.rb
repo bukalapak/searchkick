@@ -1,7 +1,6 @@
 require_relative "test_helper"
 
-class TestHighlight < Minitest::Test
-
+class HighlightTest < Minitest::Test
   def test_basic
     store_names ["Two Door Cinema Club"]
     assert_equal "Two Door <em>Cinema</em> Club", Product.search("cinema", fields: [:name], highlight: true).with_details.first[1][:highlight][:name]
@@ -28,7 +27,8 @@ class TestHighlight < Minitest::Test
 
   def test_field_options
     store_names ["Two Door Cinema Club are a Northern Irish indie rock band"]
-    assert_equal "Two Door <em>Cinema</em> Club are", Product.search("cinema", fields: [:name], highlight: {fields: {name: {fragment_size: 20}}}).with_details.first[1][:highlight][:name]
+    fragment_size = ENV["MATCH"] == "word_start" ? 26 : 20
+    assert_equal "Two Door <em>Cinema</em> Club are", Product.search("cinema", fields: [:name], highlight: {fields: {name: {fragment_size: fragment_size}}}).with_details.first[1][:highlight][:name]
   end
 
   def test_multiple_words
@@ -36,12 +36,18 @@ class TestHighlight < Minitest::Test
     assert_equal "<em>Hello</em> World <em>Hello</em>", Product.search("hello", fields: [:name], highlight: true).with_details.first[1][:highlight][:name]
   end
 
+  def test_encoder
+    store_names ["<b>Hello</b>"]
+    assert_equal "&lt;b&gt;<em>Hello</em>&lt;&#x2F;b&gt;", Product.search("hello", fields: [:name], highlight: {encoder: "html"}, misspellings: false).with_details.first[1][:highlight][:name]
+  end
+
   def test_json
+    skip if ENV["MATCH"] == "word_start"
     store_names ["Two Door Cinema Club"]
     json = {
       query: {
         match: {
-          _all: "cinema"
+          "name.analyzed" => "cinema"
         }
       },
       highlight: {
@@ -54,5 +60,4 @@ class TestHighlight < Minitest::Test
     }
     assert_equal "Two Door <strong>Cinema</strong> Club", Product.search(json: json).with_details.first[1][:highlight][:"name.analyzed"]
   end
-
 end
