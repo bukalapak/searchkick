@@ -28,21 +28,22 @@ module Searchkick
   class ImportError < Error; end
 
   class << self
-    attr_accessor :search_method_name, :wordnet_path, :timeout, :models, :msearch_method_name, :count_method_name
+    attr_accessor :search_method_name, :wordnet_path, :timeout, :models, :msearch_method_name, :count_method_name, :open_timeout
     attr_writer :client, :env, :search_timeout
   end
   self.search_method_name = :search
   self.msearch_method_name = :msearch
   self.count_method_name = :search_count
   self.wordnet_path = "/var/lib/wn_s.pl"
-  self.timeout = 10
+  self.timeout = 5
+  self.open_timeout = 5
   self.models = []
 
   def self.client
     @client ||=
       Elasticsearch::Client.new(
         url: ENV["ELASTICSEARCH_URL"],
-        transport_options: {request: {timeout: timeout}}
+        transport_options: {request: {timeout: timeout, open_timeout: open_timeout}}
       ) do |f|
         f.use Searchkick::Middleware
       end
