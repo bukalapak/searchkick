@@ -78,6 +78,10 @@ module Searchkick
       response["facets"]
     end
 
+    def aggs
+      response["aggregations"]
+    end
+
     def model_name
       klass.model_name
     end
