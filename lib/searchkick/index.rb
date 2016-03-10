@@ -221,7 +221,7 @@ module Searchkick
         settings = {
           analysis: {
             analyzer: {
-              searchkick_keyword: {
+              searchkick_keyword_nostem: {
                 type: "custom",
                 tokenizer: "keyword",
                 filter: ["lowercase"]
@@ -236,13 +236,13 @@ module Searchkick
                 # shingle must come before searchkick_stemmer
                 filter: ["standard", "lowercase", "asciifolding", "searchkick_index_shingle"]
               },
-              searchkick_search: {
+              searchkick_search_nostem: {
                 type: "custom",
                 char_filter: ["ampersand"],
                 tokenizer: "standard",
                 filter: ["standard", "lowercase", "asciifolding", "searchkick_search_shingle"]
               },
-              searchkick_search2: {
+              searchkick_search2_nostem: {
                 type: "custom",
                 char_filter: ["ampersand"],
                 tokenizer: "standard",
