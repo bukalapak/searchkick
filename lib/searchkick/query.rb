@@ -130,7 +130,7 @@ module Searchkick
 
         raise UnsupportedVersionError, "This version of Searchkick requires Elasticsearch 1.0 or greater"
       elsif status_code == 400
-        if e.message.include?("[multi_match] analyzer [searchkick_search] not found")
+        if e.message.include?("[multi_match] analyzer [searchkick_search_nostem] not found")
           raise InvalidQueryError, "Bad mapping - run #{reindex_command}"
         else
           raise InvalidQueryError, e.message
@@ -180,7 +180,7 @@ module Searchkick
               like_text: term,
               min_doc_freq: 1,
               min_term_freq: 1,
-              analyzer: "searchkick_search2"
+              analyzer: "searchkick_search2_nostem"
             }
           }
         elsif all
@@ -249,8 +249,8 @@ module Searchkick
               if field == "_all" || field.end_with?(".analyzed")
                 shared_options[:cutoff_frequency] = 0.001 unless operator == "and" || misspellings == false
                 qs.concat [
-                  shared_options.merge(analyzer: "searchkick_search"),
-                  shared_options.merge(analyzer: "searchkick_search2")
+                  shared_options.merge(analyzer: "searchkick_search_nostem"),
+                  shared_options.merge(analyzer: "searchkick_search2_nostem")
                 ]
               elsif field.end_with?(".exact")
                 f = field.split(".")[0..-2].join(".")
