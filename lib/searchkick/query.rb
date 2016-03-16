@@ -427,9 +427,15 @@ module Searchkick
       function_params = boost_by_distance.select { |k, _| [:origin, :scale, :offset, :decay].include?(k) }
       function_params[:origin] = location_value(function_params[:origin])
       custom_filters << {
+        filter: {
+          exists: {
+            field: boost_by_distance[:field]
+          }
+        },
         boost_by_distance[:function] => {
           boost_by_distance[:field] => function_params
-        }
+        },
+        weight: boost_by_distance[:weight] || 1
       }
     end
 
