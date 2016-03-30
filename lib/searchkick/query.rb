@@ -125,11 +125,12 @@ module Searchkick
               }
             }
           else
+            match_type = options[:match] if options[:match].in?([:phrase])
             queries = [
               {
                 multi_match:{
                   query: term,
-                  type: "cross_fields",
+                  type: match_type || "cross_fields",
                   fields: sfields,
                   operator: "and",
                   boost: options[:fuzziness_factor] || 10,
@@ -139,7 +140,7 @@ module Searchkick
               {
                 multi_match:{
                   query: term,
-                  type: "cross_fields",
+                  type: match_type || "cross_fields",
                   fields: sfields,
                   operator: "and",
                   boost: options[:fuzziness_factor] || 10,
@@ -153,7 +154,7 @@ module Searchkick
               queries << {
                 multi_match:{
                   query: term,
-                  type: "best_fields",
+                  type: match_type || "best_fields",
                   fields: sfields,
                   operator: "and",
                   fuzziness: edit_distance,
@@ -164,7 +165,7 @@ module Searchkick
               queries << {
                 multi_match:{
                   query: term,
-                  type: "best_fields",
+                  type: match_type || "best_fields",
                   fields: sfields,
                   operator: "and",
                   fuzziness: edit_distance,
