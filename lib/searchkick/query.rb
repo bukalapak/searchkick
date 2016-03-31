@@ -312,7 +312,7 @@ module Searchkick
 
         set_boost_by(multiply_filters, custom_filters)
         set_boost_where(custom_filters, personalize_field)
-        set_boost_by_distance(custom_filters) if options[:boost_by_distance]
+        set_boost_by_distance(custom_filters) if options[:boost_by_distance] || options[:decay]
 
         if custom_filters.any?
           payload = {
@@ -419,7 +419,7 @@ module Searchkick
     end
 
     def set_boost_by_distance(custom_filters)
-      boost_by_distance = options[:boost_by_distance] || {}
+      boost_by_distance = options[:boost_by_distance] || options[:decay] || {}
       # modified to support multiple decay functions
       custom_filters.concat(
         boost_by_distance.map do |field, value|
@@ -440,7 +440,7 @@ module Searchkick
     end
 
     def set_boost_by(multiply_filters, custom_filters)
-      boost_by = options[:boost_by] || {}
+      boost_by = options[:boost_by] || options[:refine_boost] || {}
       if boost_by.is_a?(Array)
         boost_by = Hash[boost_by.map { |f| [f, {factor: 1}] }]
       elsif boost_by.is_a?(Hash)
