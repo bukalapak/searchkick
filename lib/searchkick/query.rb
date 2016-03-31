@@ -420,23 +420,23 @@ module Searchkick
 
     def set_boost_by_distance(custom_filters)
       boost_by_distance = options[:boost_by_distance] || {}
-      boost_by_distance = {function: :gauss, scale: "5mi"}.merge(boost_by_distance)
-      if !boost_by_distance[:field] || !boost_by_distance[:origin]
-        raise ArgumentError, "boost_by_distance requires :field and :origin"
-      end
-      function_params = boost_by_distance.select { |k, _| [:origin, :scale, :offset, :decay].include?(k) }
-      function_params[:origin] = location_value(function_params[:origin])
-      custom_filters << {
-        filter: {
-          exists: {
-            field: boost_by_distance[:field]
+      # modified to support multiple decay functions
+      custom_filters.concat(
+        boost_by_distance.map do |field, value|
+          function_params = value.slice(:origin, :scale, :offset, :decay)
+          {
+            filter: {
+              exists: {
+                field: field
+              }
+            },
+            (value[:function] || :gauss) => {
+              field => function_params
+            },
+            weight: value[:weight] || 1
           }
-        },
-        boost_by_distance[:function] => {
-          boost_by_distance[:field] => function_params
-        },
-        weight: boost_by_distance[:weight] || 1
-      }
+        end
+      )
     end
 
     def set_boost_by(multiply_filters, custom_filters)
@@ -643,7 +643,7 @@ module Searchkick
             query: payload[:query],
             filter: {
               bool: {
-                must: filter
+                must: filters
               }
             }
           }
