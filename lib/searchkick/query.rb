@@ -765,7 +765,7 @@ module Searchkick
             script = log ? "log(doc['#{field}'].value + 2.718281828)" : "doc['#{field}'].value"
             {script_score: {script: "#{value[:factor].to_f} * #{script}"}}
           else
-            {field_value_factor: {field: field, factor: value[:factor].to_f, modifier: log ? "ln2p" : nil}}
+            {field_value_factor: {field: field, factor: value[:factor].to_f, modifier: value[:modifier] || (log ? "ln2p" : nil)}}
           end
 
         {
@@ -775,6 +775,7 @@ module Searchkick
             }
           }
         }.merge(script_score)
+        .merge({ weight: value[:weight] || 1 })
       end
     end
 
