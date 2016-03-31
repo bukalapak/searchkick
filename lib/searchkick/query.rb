@@ -632,7 +632,9 @@ module Searchkick
     def set_filters(payload, filters)
       if options[:facets] || options[:aggs]
         payload[:filter] = {
-          and: filters
+          bool: {
+            must: filters
+          }
         }
       else
         # more efficient query if no facets
@@ -640,7 +642,9 @@ module Searchkick
           filtered: {
             query: payload[:query],
             filter: {
-              and: filters
+              bool: {
+                must: filter
+              }
             }
           }
         }
