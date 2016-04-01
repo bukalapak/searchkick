@@ -274,13 +274,14 @@ module Searchkick
             }
           end
 
-          if conversions_field && options[:conversions] != false
+          if conversions_field && options[:conversions] != false && options[:relevance] && options[:relevance][:on]
             # wrap payload in a bool query
+            function_params = options[:relevance]
             script_score =
               if below12?
                 {script_score: {script: "doc['count'].value"}}
               else
-                {field_value_factor: {field: "#{conversions_field}.count"}}
+                {field_value_factor: {field: "#{conversions_field}.count", factor: function_params[:factor], modifier: function_params[:modifier]}}
               end
 
             payload = {
@@ -289,10 +290,10 @@ module Searchkick
                 should: {
                   nested: {
                     path: conversions_field,
-                    score_mode: "sum",
+                    score_mode: function_params[:score_mode],
                     query: {
                       function_score: {
-                        boost_mode: "replace",
+                        boost_mode: function_params[:boost_mode],
                         query: {
                           match: {
                             "#{conversions_field}.query" => term
