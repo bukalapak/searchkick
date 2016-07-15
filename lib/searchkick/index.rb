@@ -49,6 +49,15 @@ module Searchkick
       )
     end
 
+    def update(record, data)
+      client.update(
+        index: name,
+        type: document_type(record),
+        id: search_id(record),
+        body: { doc: data }
+      )
+    end
+
     def remove(record)
       client.delete(
         index: name,
@@ -87,6 +96,10 @@ module Searchkick
       end
     end
 
+    def reindex_record_partial(record, data)
+      update(record, data)
+    end
+
     def reindex_record_async(record)
       if defined?(Searchkick::ReindexV2Job)
           Searchkick::ReindexV2Job.perform_later(record.class.name, record.id.to_s)
@@ -109,7 +122,7 @@ module Searchkick
 
       options[:like_text] = like_text
       like_text = like_text.map{|k,v| "#{v}" }.compact.join(" ")
-      
+
       # TODO use index class instead of record class
       search_model(record.class, like_text, options)
     end
