@@ -76,6 +76,16 @@ module Searchkick
       end
     end
 
+    def import_update(records, data)
+      records.group_by{|r| document_type(r) }.each do |type, batch|
+        client.bulk(
+          index: name,
+          type: type,
+          body: batch.map{|r| {update: {_id: search_id(r), data: {doc: data}}} }
+        )
+      end
+    end
+
     def retrieve(record)
       client.get(
         index: name,
