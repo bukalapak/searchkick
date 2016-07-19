@@ -91,12 +91,12 @@ module Searchkick
           self.class.searchkick_index.reindex_record_async(self)
         end unless method_defined?(:reindex_async)
 
-        # Reindex partially using update API.
+        # Reindex using update API.
         # https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-update.html
-        #
-        # Parameter data is a field-value hash.
-        def reindex_partial(data)
-          self.class.searchkick_index.reindex_record_partial(self, data)
+        # Params:
+        # update: a hash of field-value for the update
+        def reindex_partial(update)
+          self.class.searchkick_index.reindex_record_partial(self, update)
         end unless method_defined?(:reindex_partial)
 
         def similar(options = {})

@@ -44,13 +44,8 @@ module Searchkick
       bulk_index([record])
     end
 
-    def update(record, data)
-      client.update(
-        index: name,
-        type: document_type(record),
-        id: search_id(record),
-        body: { doc: data }
-      )
+    def update(record, update)
+      bulk_update([record], update)
     end
 
     def remove(record)
@@ -66,16 +61,10 @@ module Searchkick
     end
     alias_method :import, :bulk_index
 
-    def import_update(records, data)
-      records.group_by{|r| document_type(r) }.each do |type, batch|
-        client.bulk(
-          index: name,
-          type: type,
-          body: batch.map{|r| {update: {_id: search_id(r), data: {doc: data}}} }
-        )
-      end
+    def bulk_update(records, update)
+      Searchkick.queue_items(records.map { |r| {update: {_index: name, _type: document_type(r), _id: search_id(r), data: {doc: update}}} })
     end
-
+    alias_method :import_update, :bulk_update
 
     def retrieve(record)
       client.get(
