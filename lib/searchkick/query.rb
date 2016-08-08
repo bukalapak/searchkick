@@ -132,7 +132,7 @@ module Searchkick
                   query: term,
                   type: match_type || "cross_fields",
                   fields: sfields,
-                  operator: "and",
+                  operator: operator,
                   boost: options[:fuzziness_factor] || 10,
                   analyzer: "searchkick_search_nostem"
                 }
@@ -142,7 +142,7 @@ module Searchkick
                   query: term,
                   type: match_type || "cross_fields",
                   fields: sfields,
-                  operator: "and",
+                  operator: operator,
                   boost: options[:fuzziness_factor] || 10,
                   analyzer: "searchkick_search2_nostem"
                 }
@@ -156,7 +156,7 @@ module Searchkick
                   query: term,
                   type: match_type || "best_fields",
                   fields: sfields,
-                  operator: "and",
+                  operator: operator,
                   fuzziness: edit_distance,
                   max_expansions: 100,
                   analyzer: "searchkick_search_nostem"
@@ -167,7 +167,7 @@ module Searchkick
                   query: term,
                   type: match_type || "best_fields",
                   fields: sfields,
-                  operator: "and",
+                  operator: operator,
                   fuzziness: edit_distance,
                   max_expansions: 100,
                   analyzer: "searchkick_search2_nostem"
