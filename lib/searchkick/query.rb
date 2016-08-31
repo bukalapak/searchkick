@@ -203,7 +203,11 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: match_type || "cross_fields",
+<<<<<<< HEAD
                   fields: fields,
+=======
+                  fields: sfields,
+>>>>>>> master
                   operator: operator,
                   boost: options[:fuzziness_factor] || 10,
                   analyzer: "searchkick_search_nostem"
@@ -213,7 +217,11 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: match_type || "cross_fields",
+<<<<<<< HEAD
                   fields: fields,
+=======
+                  fields: sfields,
+>>>>>>> master
                   operator: operator,
                   boost: options[:fuzziness_factor] || 10,
                   analyzer: "searchkick_search2_nostem"
@@ -227,7 +235,11 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: match_type || "best_fields",
+<<<<<<< HEAD
                   fields: fields,
+=======
+                  fields: sfields,
+>>>>>>> master
                   operator: operator,
                   fuzziness: edit_distance,
                   max_expansions: 100,
@@ -238,7 +250,11 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: match_type || "best_fields",
+<<<<<<< HEAD
                   fields: fields,
+=======
+                  fields: sfields,
+>>>>>>> master
                   operator: operator,
                   fuzziness: edit_distance,
                   max_expansions: 100,

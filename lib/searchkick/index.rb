@@ -75,11 +75,6 @@ module Searchkick
       data
     end
 
-    def bulk_index(records)
-      Searchkick.queue_items(records.map { |r| {index: {_index: name, _type: document_type(r), _id: search_id(r), data: search_data(r)}} })
-    end
-    alias_method :import, :bulk_index
-
     def bulk_update(records, update)
       Searchkick.queue_items(records.map { |r| {update: {_index: name, _type: document_type(r), _id: search_id(r), data: {doc: update}}} })
     end
