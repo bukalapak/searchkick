@@ -516,7 +516,13 @@ module Searchkick
         size = agg_options[:limit] ? agg_options[:limit] : 1_000
         shared_agg_options = agg_options.slice(:order, :min_doc_count)
 
-        if agg_options[:ranges]
+        if agg_options[:stat_aggs]
+          payload[:aggs][agg_options[:stat_aggs]] = {
+            stats: {
+              field: agg_options[:field] || field
+            }.merge(shared_agg_options)
+          }
+        elsif agg_options[:ranges]
           payload[:aggs][field] = {
             range: {
               field: agg_options[:field] || field,
