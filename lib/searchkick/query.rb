@@ -546,7 +546,7 @@ module Searchkick
         end
 
         where = {}
-        where = (options[:where] || {}).reject { |k| k == field } unless options[:smart_aggs] == false
+        where = (options[:where] || {}).reject { |k| k == field } if options[:smart_aggs]
         agg_filters = where_filters(where.merge(agg_options[:where] || {}))
         if agg_filters.any?
           payload[:aggs][field] = {
@@ -617,25 +617,16 @@ module Searchkick
     end
 
     def set_filters(payload, filters)
-      if options[:facets] || options[:aggs]
-        payload[:filter] = {
-          bool: {
-            must: filters
-          }
-        }
-      else
-        # more efficient query if no facets
-        payload[:query] = {
-          filtered: {
-            query: payload[:query],
-            filter: {
-              bool: {
-                must: filters
-              }
+      payload[:query] = {
+        filtered: {
+          query: payload[:query],
+          filter: {
+            bool: {
+              must: filters
             }
           }
         }
-      end
+      }
     end
 
     def set_order(payload)
