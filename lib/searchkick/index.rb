@@ -127,9 +127,7 @@ module Searchkick
       options[:where][:_id][:not] = record.id.to_s
       options[:per_page] ||= 10
       options[:similar] = true
-
       options[:like_text] = like_text
-      like_text = like_text.map{|k,v| "#{v}" }.compact.join(" ")
 
       # TODO use index class instead of record class
       search_model(record.class, like_text, options)

@@ -245,34 +245,6 @@ module Searchkick
                   analyzer: "searchkick_search2_nostem"
                 }
               }
-
-              match_type =
-                if field.end_with?(".phrase")
-                  field = field.sub(/\.phrase\z/, ".analyzed")
-                  :match_phrase
-                else
-                  :match
-                end
-
-              if field == "_all" || field.end_with?(".analyzed")
-                shared_options[:cutoff_frequency] = 0.001 unless operator == "and" || misspellings == false
-                qs.concat [
-                  shared_options.merge(analyzer: "searchkick_search_nostem"),
-                  shared_options.merge(analyzer: "searchkick_search2_nostem")
-                ]
-              elsif field.end_with?(".exact")
-                f = field.split(".")[0..-2].join(".")
-                queries << {match: {f => shared_options.merge(analyzer: "keyword")}}
-              else
-                analyzer = field.match(/\.word_(start|middle|end)\z/) ? "searchkick_word_search" : "searchkick_autocomplete_search"
-                qs << shared_options.merge(analyzer: analyzer)
-              end
-
-              if misspellings != false
-                qs.concat qs.map { |q| q.except(:cutoff_frequency).merge(fuzziness: edit_distance, prefix_length: prefix_length, max_expansions: max_expansions, boost: factor).merge(transpositions) }
-              end
-
-              queries.concat(qs.map { |q| {match_type => {field => q}} })
             end
 
             payload = {
