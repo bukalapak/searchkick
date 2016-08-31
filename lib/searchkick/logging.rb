@@ -1,54 +1,87 @@
 # based on https://gist.github.com/mnutt/566725
+require "active_support/core_ext/module/attr_internal"
 
 module Searchkick
-  class Query
-    def execute_with_instrumentation
+  module QueryWithInstrumentation
+    def execute_search
+      name = searchkick_klass ? "#{searchkick_klass.name} Search" : "Search"
       event = {
-        name: "#{searchkick_klass.name} #{@options[:search_type] == "count" ? 'Count' : 'Search'}",
+        name: name,
         query: params
       }
-      ActiveSupport::Notifications.instrument("#{@options[:search_type] == "count" ? 'count' : 'search'}.searchkick", event) do
-        execute_without_instrumentation
+      ActiveSupport::Notifications.instrument("search.searchkick", event) do
+        super
       end
     end
-    alias_method_chain :execute, :instrumentation
   end
 
-  class Index
-    def store_with_instrumentation(record)
+  module IndexWithInstrumentation
+    def store(record)
       event = {
         name: "#{record.searchkick_klass.name} Store",
         id: search_id(record)
       }
-      ActiveSupport::Notifications.instrument("request.searchkick", event) do
-        store_without_instrumentation(record)
+      if Searchkick.callbacks_value == :bulk
+        super
+      else
+        ActiveSupport::Notifications.instrument("request.searchkick", event) do
+          super
+        end
       end
     end
-    alias_method_chain :store, :instrumentation
 
-    def remove_with_instrumentation(record)
+    def remove(record)
+      name = record && record.searchkick_klass ? "#{record.searchkick_klass.name} Remove" : "Remove"
       event = {
-        name: "#{record.searchkick_klass.name} Remove",
+        name: name,
         id: search_id(record)
       }
-      ActiveSupport::Notifications.instrument("request.searchkick", event) do
-        remove_without_instrumentation(record)
+      if Searchkick.callbacks_value == :bulk
+        super
+      else
+        ActiveSupport::Notifications.instrument("request.searchkick", event) do
+          super
+        end
       end
     end
-    alias_method_chain :remove, :instrumentation
 
-    def import_with_instrumentation(records)
+    def import(records)
       if records.any?
         event = {
           name: "#{records.first.searchkick_klass.name} Import",
           count: records.size
         }
         ActiveSupport::Notifications.instrument("request.searchkick", event) do
-          import_without_instrumentation(records)
+          super(records)
         end
       end
     end
-    alias_method_chain :import, :instrumentation
+  end
+
+  module SearchkickWithInstrumentation
+    def multi_search(searches)
+      event = {
+        name: "Multi Search",
+        body: searches.flat_map { |q| [q.params.except(:body).to_json, q.body.to_json] }.map { |v| "#{v}\n" }.join
+      }
+      ActiveSupport::Notifications.instrument("multi_search.searchkick", event) do
+        super
+      end
+    end
+
+    def perform_items(items)
+      if callbacks_value == :bulk
+        event = {
+          name: "Bulk",
+          count: items.size
+        }
+        ActiveSupport::Notifications.instrument("request.searchkick", event) do
+          super
+        end
+      else
+        super
+      end
+    end
   end
 
   # https://github.com/rails/rails/blob/master/activerecord/lib/active_record/log_subscriber.rb
@@ -62,7 +95,8 @@ module Searchkick
     end
 
     def self.reset_runtime
-      rt, self.runtime = runtime, 0
+      rt = runtime
+      self.runtime = 0
       rt
     end
 
@@ -77,7 +111,7 @@ module Searchkick
 
       # no easy way to tell which host the client will use
       host = Searchkick.client.transport.hosts.first
-      debug "  #{color(name, YELLOW, true)}  curl #{host[:protocol]}://#{host[:host]}:#{host[:port]}/#{CGI.escape(index)}#{type ? "/#{type.map{|t| CGI.escape(t) }.join(",")}" : ""}/_search?pretty -d '#{payload[:query][:body].to_json}'"
+      debug "  #{color(name, YELLOW, true)}  curl #{host[:protocol]}://#{host[:host]}:#{host[:port]}/#{CGI.escape(index)}#{type ? "/#{type.map { |t| CGI.escape(t) }.join(',')}" : ''}/_search?pretty -d '#{payload[:query][:body].to_json}'"
     end
 
     def request(event)
@@ -88,6 +122,18 @@ module Searchkick
       name = "#{payload[:name]} (#{event.duration.round(1)}ms)"
 
       debug "  #{color(name, YELLOW, true)}  #{payload.except(:name).to_json}"
+    end
+
+    def multi_search(event)
+      self.class.runtime += event.duration
+      return unless logger.debug?
+
+      payload = event.payload
+      name = "#{payload[:name]} (#{event.duration.round(1)}ms)"
+
+      # no easy way to tell which host the client will use
+      host = Searchkick.client.transport.hosts.first
+      debug "  #{color(name, YELLOW, true)}  curl #{host[:protocol]}://#{host[:host]}:#{host[:port]}/_msearch?pretty -d '#{payload[:body]}'"
     end
   end
 
@@ -122,14 +168,17 @@ module Searchkick
 
     module ClassMethods
       def log_process_action(payload)
-        messages, runtime = super, payload[:searchkick_runtime]
+        messages = super
+        runtime = payload[:searchkick_runtime]
         messages << ("Searchkick: %.1fms" % runtime.to_f) if runtime.to_f > 0
         messages
       end
     end
   end
 end
-
+Searchkick::Query.send(:prepend, Searchkick::QueryWithInstrumentation)
+Searchkick::Index.send(:prepend, Searchkick::IndexWithInstrumentation)
+Searchkick.singleton_class.send(:prepend, Searchkick::SearchkickWithInstrumentation)
 Searchkick::LogSubscriber.attach_to :searchkick
 ActiveSupport.on_load(:action_controller) do
   include Searchkick::ControllerRuntime

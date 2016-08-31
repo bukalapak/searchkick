@@ -8,7 +8,8 @@ require "searchkick/query"
 require "searchkick/reindex_job"
 require "searchkick/model"
 require "searchkick/tasks"
-require "searchkick/logging" if defined?(Rails)
+require "searchkick/middleware"
+require "searchkick/logging" if defined?(ActiveSupport::Notifications)
 
 # background jobs
 begin
@@ -23,20 +24,16 @@ module Searchkick
   class MissingIndexError < Error; end
   class UnsupportedVersionError < Error; end
   class InvalidQueryError < Elasticsearch::Transport::Transport::Errors::BadRequest; end
+  class DangerousOperation < Error; end
   class ImportError < Error; end
 
   class << self
-    attr_accessor :search_method_name
-    attr_accessor :msearch_method_name
-    attr_accessor :count_method_name
-    attr_accessor :wordnet_path
-    attr_accessor :timeout
-    attr_accessor :open_timeout
-    attr_accessor :models
+    attr_accessor :search_method_name, :wordnet_path, :timeout, :models, :msearch_method_name, :count_method_name, :open_timeout
+    attr_writer :client, :env, :search_timeout
   end
   self.search_method_name = :search
-  self.count_method_name = :search_count
   self.msearch_method_name = :msearch
+  self.count_method_name = :search_count
   self.wordnet_path = "/var/lib/wn_s.pl"
   self.timeout = 5
   self.open_timeout = 5
@@ -47,11 +44,17 @@ module Searchkick
       Elasticsearch::Client.new(
         url: ENV["ELASTICSEARCH_URL"],
         transport_options: {request: {timeout: timeout, open_timeout: open_timeout}}
-      )
+      ) do |f|
+        f.use Searchkick::Middleware
+      end
   end
 
-  def self.client=(client)
-    @client = client
+  def self.env
+    @env ||= ENV["RAILS_ENV"] || ENV["RACK_ENV"] || "development"
+  end
+
+  def self.search_timeout
+    @search_timeout || timeout
   end
 
   def self.server_version
@@ -122,8 +125,135 @@ module Searchkick
     Thread.current[:searchkick_callbacks_enabled] = value
   end
 
-  def self.env
-    @env ||= ENV["RAILS_ENV"] || ENV["RACK_ENV"] || "development"
+  def self.callbacks(value)
+    if block_given?
+      previous_value = callbacks_value
+      begin
+        self.callbacks_value = value
+        yield
+        perform_bulk if callbacks_value == :bulk
+      ensure
+        self.callbacks_value = previous_value
+      end
+    else
+      self.callbacks_value = value
+    end
+  end
+
+  def self.queue_items(items)
+    queued_items.concat(items)
+    perform_bulk unless callbacks_value == :bulk
+  end
+
+  def self.perform_bulk
+    items = queued_items
+    clear_queued_items
+    perform_items(items)
+  end
+
+  def self.perform_items(items)
+    if items.any?
+      response = client.bulk(body: items)
+      if response["errors"]
+        first_item = response["items"].first
+        raise Searchkick::ImportError, (first_item["index"] || first_item["delete"])["error"]
+      end
+    end
+  end
+
+  def self.queued_items
+    Thread.current[:searchkick_queued_items] ||= []
+  end
+
+  def self.clear_queued_items
+    Thread.current[:searchkick_queued_items] = []
+  end
+
+  def self.callbacks_value
+    Thread.current[:searchkick_callbacks_enabled]
+  end
+
+  def self.callbacks_value=(value)
+    Thread.current[:searchkick_callbacks_enabled] = value
+  end
+
+  def self.callbacks(value)
+    if block_given?
+      previous_value = callbacks_value
+      begin
+        self.callbacks_value = value
+        yield
+        perform_bulk if callbacks_value == :bulk
+      ensure
+        self.callbacks_value = previous_value
+      end
+    else
+      self.callbacks_value = value
+    end
+  end
+
+  # private
+  def self.queue_items(items)
+    queued_items.concat(items)
+    perform_bulk unless callbacks_value == :bulk
+  end
+
+  # private
+  def self.perform_bulk
+    items = queued_items
+    clear_queued_items
+    perform_items(items)
+  end
+
+  # private
+  def self.perform_items(items)
+    if items.any?
+      response = client.bulk(body: items)
+      if response["errors"]
+        first_item = response["items"].first
+        raise Searchkick::ImportError, (first_item["index"] || first_item["delete"])["error"]
+      end
+    end
+  end
+
+  # private
+  def self.queued_items
+    Thread.current[:searchkick_queued_items] ||= []
+  end
+
+  # private
+  def self.clear_queued_items
+    Thread.current[:searchkick_queued_items] = []
+  end
+
+  # private
+  def self.callbacks_value
+    Thread.current[:searchkick_callbacks_enabled]
+  end
+
+  # private
+  def self.callbacks_value=(value)
+    Thread.current[:searchkick_callbacks_enabled] = value
+  end
+
+  def self.search(term = nil, options = {}, &block)
+    query = Searchkick::Query.new(nil, term, options)
+    block.call(query.body) if block
+    if options[:execute] == false
+      query
+    else
+      query.execute
+    end
+  end
+
+  def self.multi_search(queries)
+    if queries.any?
+      responses = client.msearch(body: queries.flat_map { |q| [q.params.except(:body), q.body] })["responses"]
+      queries.each_with_index do |query, i|
+        query.handle_response(responses[i])
+      end
+    end
+    nil
   end
 end
 

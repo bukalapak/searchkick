@@ -15,27 +15,24 @@ module Searchkick
       @options = options
     end
 
+    # experimental: may not make next release
+    def records
+      @records ||= results_query(klass, hits)
+    end
+
     def results
       @results ||= begin
         if options[:load]
           # results can have different types
           results = {}
 
-          hits.group_by{|hit, i| hit["_type"] }.each do |type, grouped_hits|
-            records = type.camelize.constantize
-            if options[:includes]
-              if defined?(NoBrainer::Document) and records < NoBrainer::Document
-                records = records.preload(options[:includes])
-              else
-                records = records.includes(options[:includes])
-              end
-            end
-            results[type] = results_query(records, grouped_hits)
+          hits.group_by { |hit, _| hit["_type"] }.each do |type, grouped_hits|
+            results[type] = results_query(type.camelize.constantize, grouped_hits).to_a.index_by { |r| r.id.to_s }
           end
 
           # sort
           hits.map do |hit|
-            results[hit["_type"]].find{|r| r.id.to_s == hit["_id"].to_s }
+            results[hit["_type"]][hit["_id"].to_s]
           end.compact
         else
           hits.map do |hit|
@@ -47,6 +44,14 @@ module Searchkick
               else
                 hit
               end
+
+            if hit["highlight"]
+              highlight = Hash[hit["highlight"].map { |k, v| [base_field(k), v.first] }]
+              options[:highlighted_fields].map { |k| base_field(k) }.each do |k|
+                result["highlighted_#{k}"] ||= (highlight[k] || result[k])
+              end
+            end
+
             result["id"] ||= result["_id"] # needed for legacy reasons
             Hashie::Mash.new(result)
           end
@@ -56,7 +61,7 @@ module Searchkick
 
     def suggestions
       if response["suggest"]
-        response["suggest"].values.flat_map{|v| v.first["options"] }.sort_by{|o| -o["score"] }.map{|o| o["text"] }.uniq
+        response["suggest"].values.flat_map { |v| v.first["options"] }.sort_by { |o| -o["score"] }.map { |o| o["text"] }.uniq
       else
         raise "Pass `suggest: true` to the search method for suggestions"
       end
@@ -70,7 +75,7 @@ module Searchkick
       each_with_hit.map do |model, hit|
         details = {}
         if hit["highlight"]
-          details[:highlight] = Hash[ hit["highlight"].map{|k, v| [(options[:json] ? k : k.sub(/\.analyzed\z/, "")).to_sym, v.first] } ]
+          details[:highlight] = Hash[hit["highlight"].map { |k, v| [(options[:json] ? k : k.sub(/\.#{@options[:match_suffix]}\z/, "")).to_sym, v.first] }]
         end
         [model, details]
       end
@@ -80,8 +85,31 @@ module Searchkick
       response["facets"]
     end
 
-    def aggs
+    def aggregations
       response["aggregations"]
+    end
+
+    def aggs
+      @aggs ||= begin
+        if aggregations
+          aggregations.dup.each do |field, filtered_agg|
+            buckets = filtered_agg[field]
+            # move the buckets one level above into the field hash
+            if buckets
+              filtered_agg.delete(field)
+              filtered_agg.merge!(buckets)
+            end
+          end
+        end
+      end
+    end
+
+    def took
+      response["took"]
+    end
+
+    def error
+      response["error"]
     end
 
     def extracted_aggs
@@ -148,32 +176,47 @@ module Searchkick
       next_page.nil?
     end
 
+    def out_of_range?
+      current_page > total_pages
+    end
+
     def hits
       @response["hits"]["hits"]
     end
 
     private
 
-    def results_query(records, grouped_hits)
-      if records.respond_to?(:primary_key) and records.primary_key
+    def results_query(records, hits)
+      ids = hits.map { |hit| hit["_id"] }
+
+      if options[:includes]
+        records =
+          if defined?(NoBrainer::Document) && records < NoBrainer::Document
+            records.preload(options[:includes])
+          else
+            records.includes(options[:includes])
+          end
+      end
+
+      if records.respond_to?(:primary_key) && records.primary_key
         # ActiveRecord
-        if @options[:unscoped]
-          records.unscoped.where(records.primary_key => grouped_hits.map{|hit| hit["_id"] }).to_a
-        else
-          records.where(records.primary_key => grouped_hits.map{|hit| hit["_id"] }).to_a
-        end
-      elsif records.respond_to?(:all) and records.all.respond_to?(:for_ids)
+        records.where(records.primary_key => ids)
+      elsif records.respond_to?(:all) && records.all.respond_to?(:for_ids)
         # Mongoid 2
-        records.all.for_ids(grouped_hits.map{|hit| hit["_id"] }).to_a
+        records.all.for_ids(ids)
       elsif records.respond_to?(:queryable)
         # Mongoid 3+
-        records.queryable.for_ids(grouped_hits.map{|hit| hit["_id"] }).to_a
-      elsif records.respond_to?(:unscoped) and records.all.respond_to?(:preload)
+        records.queryable.for_ids(ids)
+      elsif records.respond_to?(:unscoped) && records.all.respond_to?(:preload)
         # Nobrainer
-        records.unscoped.where(:id.in => grouped_hits.map{|hit| hit["_id"] }).to_a
+        records.unscoped.where(:id.in => ids)
       else
         raise "Not sure how to load records"
       end
+    end
+
+    def base_field(k)
+      k.sub(/\.(analyzed|word_start|word_middle|word_end|text_start|text_middle|text_end|exact)\z/, "")
     end
   end
 end
