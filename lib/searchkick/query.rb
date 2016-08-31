@@ -197,45 +197,53 @@ module Searchkick
               }
             }
           else
-            queries = []
-
-            misspellings =
-              if options.key?(:misspellings)
-                options[:misspellings]
-              elsif options.key?(:mispellings)
-                options[:mispellings] # why not?
-              else
-                true
-              end
-
-            if misspellings.is_a?(Hash) && misspellings[:below] && !@misspellings_below
-              @misspellings_below = misspellings[:below].to_i
-              misspellings = false
-            end
-
-            if misspellings != false
-              edit_distance = (misspellings.is_a?(Hash) && (misspellings[:edit_distance] || misspellings[:distance])) || 1
-              transpositions =
-                if misspellings.is_a?(Hash) && misspellings.key?(:transpositions)
-                  {fuzzy_transpositions: misspellings[:transpositions]}
-                elsif below14?
-                  {}
-                else
-                  {fuzzy_transpositions: true}
-                end
-              prefix_length = (misspellings.is_a?(Hash) && misspellings[:prefix_length]) || 0
-              default_max_expansions = @misspellings_below ? 20 : 3
-              max_expansions = (misspellings.is_a?(Hash) && misspellings[:max_expansions]) || default_max_expansions
-            end
-
-            fields.each do |field|
-              qs = []
-
-              factor = boost_fields[field] || 1
-              shared_options = {
-                query: term,
-                operator: operator,
-                boost: 10 * factor
+            match_type = options[:match] if options[:match].in?([:phrase])
+            queries = [
+              {
+                multi_match:{
+                  query: term,
+                  type: match_type || "cross_fields",
+                  fields: fields,
+                  operator: operator,
+                  boost: options[:fuzziness_factor] || 10,
+                  analyzer: "searchkick_search_nostem"
+                }
+              },
+              {
+                multi_match:{
+                  query: term,
+                  type: match_type || "cross_fields",
+                  fields: fields,
+                  operator: operator,
+                  boost: options[:fuzziness_factor] || 10,
+                  analyzer: "searchkick_search2_nostem"
+                }
+              }
+            ]
+            misspellings = options.has_key?(:misspellings) ? options[:misspellings] : options[:mispellings]
+            edit_distance = (misspellings.is_a?(Hash) && (misspellings[:edit_distance] || misspellings[:distance])) || 1 if misspellings != false
+            if edit_distance && edit_distance > 0
+              queries << {
+                multi_match:{
+                  query: term,
+                  type: match_type || "best_fields",
+                  fields: fields,
+                  operator: operator,
+                  fuzziness: edit_distance,
+                  max_expansions: 100,
+                  analyzer: "searchkick_search_nostem"
+                }
+              }
+              queries << {
+                multi_match:{
+                  query: term,
+                  type: match_type || "best_fields",
+                  fields: fields,
+                  operator: operator,
+                  fuzziness: edit_distance,
+                  max_expansions: 100,
+                  analyzer: "searchkick_search2_nostem"
+                }
               }
 
               match_type =

@@ -112,6 +112,17 @@ module Searchkick
       response["error"]
     end
 
+    def extracted_aggs
+      Hash.new.tap do |result|
+        aggs.each do |key, value|
+          result[key.to_sym] = {}
+          value['buckets'] && value['buckets'].each do |bucket|
+            result[key.to_sym][bucket['key']] = bucket['doc_count']
+          end
+        end if aggs.present?
+      end
+    end
+
     def model_name
       klass.model_name
     end

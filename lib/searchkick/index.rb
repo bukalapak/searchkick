@@ -48,6 +48,10 @@ module Searchkick
       bulk_index([record])
     end
 
+    def update(record, update)
+      bulk_update([record], update)
+    end
+
     def remove(record)
       bulk_delete([record])
     end
@@ -71,6 +75,16 @@ module Searchkick
       data
     end
 
+    def bulk_index(records)
+      Searchkick.queue_items(records.map { |r| {index: {_index: name, _type: document_type(r), _id: search_id(r), data: search_data(r)}} })
+    end
+    alias_method :import, :bulk_index
+
+    def bulk_update(records, update)
+      Searchkick.queue_items(records.map { |r| {update: {_index: name, _type: document_type(r), _id: search_id(r), data: {doc: update}}} })
+    end
+    alias_method :import_update, :bulk_update
+
     def retrieve(record)
       client.get(
         index: name,
@@ -89,6 +103,10 @@ module Searchkick
       else
         store(record)
       end
+    end
+
+    def reindex_record_partial(record, data)
+      update(record, data)
     end
 
     def reindex_record_async(record)
@@ -114,6 +132,9 @@ module Searchkick
       options[:where][:_id][:not] = record.id.to_s
       options[:per_page] ||= 10
       options[:similar] = true
+
+      options[:like_text] = like_text
+      like_text = like_text.map{|k,v| "#{v}" }.compact.join(" ")
 
       # TODO use index class instead of record class
       search_model(record.class, like_text, options)
