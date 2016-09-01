@@ -237,6 +237,11 @@ module Searchkick
         settings = {
           analysis: {
             analyzer: {
+              searchkick_keyword: {
+                type: "custom",
+                tokenizer: "keyword",
+                filter: ["lowercase"] + (options[:stem_conversions] == false ? [] : ["searchkick_stemmer"])
+              },
               searchkick_keyword_nostem: {
                 type: "custom",
                 tokenizer: "keyword",
@@ -251,6 +256,16 @@ module Searchkick
                 # synonym should come last, after stemming and shingle
                 # shingle must come before searchkick_stemmer
                 filter: ["standard", "lowercase", "asciifolding", "searchkick_index_shingle"]
+              },
+              searchkick_search: {
+                type: "custom",
+                tokenizer: "standard",
+                filter: ["standard", "lowercase", "asciifolding", "searchkick_search_shingle", "searchkick_stemmer"]
+              },
+              searchkick_search2: {
+                type: "custom",
+                tokenizer: "standard",
+                filter: ["standard", "lowercase", "asciifolding", "searchkick_stemmer"]
               },
               searchkick_search_nostem: {
                 type: "custom",
