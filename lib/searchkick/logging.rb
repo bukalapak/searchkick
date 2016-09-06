@@ -7,7 +7,8 @@ module Searchkick
       name = searchkick_klass ? "#{searchkick_klass.name} Search" : "Search"
       event = {
         name: name,
-        query: params
+        body: params,
+        body_size: params.to_json.size
       }
       ActiveSupport::Notifications.instrument("search.searchkick", event) do
         super
@@ -15,54 +16,13 @@ module Searchkick
     end
   end
 
-  module IndexWithInstrumentation
-    def store(record)
-      event = {
-        name: "#{record.searchkick_klass.name} Store",
-        id: search_id(record)
-      }
-      if Searchkick.callbacks_value == :bulk
-        super
-      else
-        ActiveSupport::Notifications.instrument("request.searchkick", event) do
-          super
-        end
-      end
-    end
-
-    def remove(record)
-      name = record && record.searchkick_klass ? "#{record.searchkick_klass.name} Remove" : "Remove"
-      event = {
-        name: name,
-        id: search_id(record)
-      }
-      if Searchkick.callbacks_value == :bulk
-        super
-      else
-        ActiveSupport::Notifications.instrument("request.searchkick", event) do
-          super
-        end
-      end
-    end
-
-    def import(records)
-      if records.any?
-        event = {
-          name: "#{records.first.searchkick_klass.name} Import",
-          count: records.size
-        }
-        ActiveSupport::Notifications.instrument("request.searchkick", event) do
-          super(records)
-        end
-      end
-    end
-  end
-
   module SearchkickWithInstrumentation
     def multi_search(searches)
+      body = searches.map{ |q| "#{q.params.except(:body).to_json}\n#{q.body.to_json}" }.join("\n")
       event = {
         name: "Multi Search",
-        body: searches.flat_map { |q| [q.params.except(:body).to_json, q.body.to_json] }.map { |v| "#{v}\n" }.join
+        body: body,
+        body_size: body.size
       }
       ActiveSupport::Notifications.instrument("multi_search.searchkick", event) do
         super
@@ -70,15 +30,12 @@ module Searchkick
     end
 
     def perform_items(items)
-      if callbacks_value == :bulk
-        event = {
-          name: "Bulk",
-          count: items.size
-        }
-        ActiveSupport::Notifications.instrument("request.searchkick", event) do
-          super
-        end
-      else
+      event = {
+        name: "Bulk",
+        body_size: items.to_json.size,
+        body: items
+      }
+      ActiveSupport::Notifications.instrument("request.searchkick", event) do
         super
       end
     end
@@ -177,7 +134,6 @@ module Searchkick
   end
 end
 Searchkick::Query.send(:prepend, Searchkick::QueryWithInstrumentation)
-Searchkick::Index.send(:prepend, Searchkick::IndexWithInstrumentation)
 Searchkick.singleton_class.send(:prepend, Searchkick::SearchkickWithInstrumentation)
 Searchkick::LogSubscriber.attach_to :searchkick
 ActiveSupport.on_load(:action_controller) do
