@@ -63,8 +63,8 @@ module Searchkick
 
       payload = event.payload
       name = "#{payload[:name]} (#{event.duration.round(1)}ms)"
-      type = payload[:query][:type]
-      index = payload[:query][:index].is_a?(Array) ? payload[:query][:index].join(",") : payload[:query][:index]
+      type = payload[:body][:type]
+      index = payload[:body][:index].is_a?(Array) ? payload[:body][:index].join(",") : payload[:body][:index]
 
       # no easy way to tell which host the client will use
       host = Searchkick.client.transport.hosts.first
