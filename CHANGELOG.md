@@ -1,9 +1,103 @@
-## 0.8.6 [unreleased]
+## 1.2.2 [unreleased]
+
+- Added support for phrase matches
+
+## 1.2.1
+
+- Added `multi_search` method
+- Added support for routing for Elasticsearch 2
+- Added support for `search_document_id` and `search_document_type` in models
+- Fixed error with instrumentation for searching multiple models
+- Fixed instrumentation for bulk updates
+
+## 1.2.0
+
+- Fixed deprecation warnings with `alias_method_chain`
+- Added `analyzed_only` option for large text fields
+- Added `encoder` option to highlight
+- Fixed issue in `similar` method with `per_page` option
+- Added basic support for multiple models
+
+## 1.1.2
+
+- Added bulk updates with `callbacks` method
+- Added `bulk_delete` method
+- Added `search_timeout` option
+- Fixed bug with new location format for `boost_by_distance`
+
+## 1.1.1
+
+- Added support for `{lat: lat, lon: lon}` as preferred format for locations
+
+## 1.1.0
+
+- Added `below` option to misspellings to improve performance
+- Fixed synonyms for `word_*` partial matches
+- Added `searchable` option
+- Added `similarity` option
+- Added `match` option
+- Added `word` option
+- Added highlighted fields to `load: false`
+
+## 1.0.3
+
+- Added support for Elasticsearch 2.1
+
+## 1.0.2
+
+- Throw `Searchkick::ImportError` for errors when importing records
+- Errors now inherit from `Searchkick::Error`
+- Added `order` option to aggregations
+- Added `mapping` method
+
+## 1.0.1
+
+- Added aggregations method to get raw response
+- Use `execute: false` for lazy loading
+- Return nil when no aggs
+- Added emoji search
+
+## 1.0.0
+
+- Added support for Elasticsearch 2.0
+- Added support for aggregations
+- Added ability to use misspellings for partial matches
+- Added `fragment_size` option for highlight
+- Added `took` method to results
+
+Breaking changes
+
+- Raise `Searchkick::DangerousOperation` error when calling reindex with scope
+- Enabled misspellings by default for partial matches
+- Enabled transpositions by default for misspellings
+
+## 0.9.1
+
+- `and` now matches `&`
+- Added `transpositions` option to misspellings
+- Added `boost_mode` and `log` options to `boost_by`
+- Added `prefix_length` option to `misspellings`
+- Added ability to set env
+
+## 0.9.0
+
+- Much better performance for where queries if no facets
+- Added basic support for regex
+- Added support for routing
+- Made `Searchkick.disable_callbacks` thread-safe
+
+## 0.8.7
+
+- Fixed Mongoid import
+
+## 0.8.6
 
 - Added support for NoBrainer
 - Added `stem_conversions: false` option
-- Fixed suggestions with partial match boost
 - Added support for multiple `boost_where` values on the same field
+- Added support for array of values for `boost_where`
+- Fixed suggestions with partial match boost
+- Fixed redefining existing instance methods in models
 
 ## 0.8.5
 

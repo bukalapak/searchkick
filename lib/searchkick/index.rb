@@ -27,14 +27,18 @@ module Searchkick
       client.indices.exists_alias name: name
     end
 
+    def mapping
+      client.indices.get_mapping index: name
+    end
+
     def swap(new_name)
       old_indices =
         begin
           client.indices.get_alias(name: name).keys
         rescue Elasticsearch::Transport::Transport::Errors::NotFound
-          []
+          {}
         end
-      actions = old_indices.map{|old_name| {remove: {index: old_name, alias: name}} } + [{add: {index: new_name, alias: name}}]
+      actions = old_indices.map { |old_name| {remove: {index: old_name, alias: name}} } + [{add: {index: new_name, alias: name}}]
       client.indices.update_aliases body: {actions: actions}
     end
 
@@ -53,13 +57,23 @@ module Searchkick
     end
 
     def bulk_delete(records)
-      Searchkick.queue_items(records.reject { |r| r.id.blank? }.map { |r| {delete: {_index: name, _type: document_type(r), _id: search_id(r)}} })
+      Searchkick.queue_items(records.reject { |r| r.id.blank? }.map { |r| {delete: record_data(r)} })
     end
 
     def bulk_index(records)
-      Searchkick.queue_items(records.map { |r| {index: {_index: name, _type: document_type(r), _id: search_id(r), data: search_data(r)}} })
+      Searchkick.queue_items(records.map { |r| {index: record_data(r).merge(data: search_data(r))} })
     end
     alias_method :import, :bulk_index
+
+    def record_data(r)
+      data = {
+        _index: name,
+        _id: search_id(r),
+        _type: document_type(r)
+      }
+      data[:_routing] = r.search_routing if r.respond_to?(:search_routing)
+      data
+    end
 
     def bulk_update(records, update)
       Searchkick.queue_items(records.map { |r| {update: {_index: name, _type: document_type(r), _id: search_id(r), data: {doc: update}}} })
@@ -70,12 +84,12 @@ module Searchkick
       client.get(
         index: name,
         type: document_type(record),
-        id: record.id
+        id: search_id(record)
       )["_source"]
     end
 
     def reindex_record(record)
-      if record.destroyed? or !record.should_index?
+      if record.destroyed? || !record.should_index?
         begin
           remove(record)
         rescue Elasticsearch::Transport::Transport::Errors::NotFound
@@ -104,14 +118,14 @@ module Searchkick
 
     def similar_record(record, options = {})
       like_text = record.search_data
-        .keep_if{|k,v| !options[:fields] || options[:fields].include?(k) }
+        .keep_if { |k, _| !options[:fields] || options[:fields].include?(k) }
         # .values.compact.join(" ")
 
       # TODO deep merge method
       options[:where] ||= {}
       options[:where][:_id] ||= {}
       options[:where][:_id][:not] = record.id.to_s
-      options[:limit] ||= 10
+      options[:per_page] ||= 10
       options[:similar] = true
 
       options[:like_text] = like_text
@@ -125,9 +139,7 @@ module Searchkick
 
     def search_model(searchkick_klass, term = nil, options = {}, &block)
       query = Searchkick::Query.new(searchkick_klass, term, options)
-      if block
-        block.call(query.body)
-      end
+      block.call(query.body) if block
       if options[:execute] == false
         query
       else
@@ -135,30 +147,10 @@ module Searchkick
       end
     end
 
-    def count_model(searchkick_klass, term = nil, options = {})
-      search_model(searchkick_klass, term, options.merge(search_type: "count")).total_count
-    end
-
-    def msearch_model(searchkick_klass, args = [])
-      queries = args.map { |term, options| search_model(searchkick_klass, term, options.merge(execute: false)) }
-      body = queries.map do |q|
-        param = q.params
-        param[:search] = param[:body]
-        param[:search].merge!(timeout: param[:timeout]) if param[:timeout].present?
-        param.except(:body, :timeout)
-      end
-      responses = Searchkick.client.msearch(body: body)["responses"]
-      result = []
-      (0...queries.count).each do |i|
-        queries[i].respond = responses[i]
-        result << queries[i].execute
-      end
-      return result
-    end
-
     # reindex
 
-    def create_index
+    def create_index(options = {})
+      index_options = options[:index_options] || self.index_options
       index = Searchkick::Index.new("#{name}_#{Time.now.strftime('%Y%m%d%H%M%S%L')}", @options)
       index.create(index_options)
       index
@@ -166,8 +158,13 @@ module Searchkick
 
     # remove old indices that start w/ index_name
     def clean_indices
-      all_indices = client.indices.get_aliases
-      indices = all_indices.select{|k, v| (v.empty? || v["aliases"].empty?) && k =~ /\A#{Regexp.escape(name)}_\d{14,17}\z/ }.keys
+      all_indices =
+        begin
+          client.indices.get_aliases
+        rescue Elasticsearch::Transport::Transport::Errors::NotFound
+          {}
+        end
+      indices = all_indices.select { |k, v| (v.empty? || v["aliases"].empty?) && k =~ /\A#{Regexp.escape(name)}_\d{14,17}\z/ }.keys
       indices.each do |index|
         Searchkick::Index.new(index).delete
       end
@@ -181,7 +178,7 @@ module Searchkick
 
       clean_indices
 
-      index = create_index
+      index = create_index(index_options: scope.searchkick_index_options)
 
       # check if alias exists
       if alias_exists?
@@ -211,7 +208,7 @@ module Searchkick
       scope = scope.search_import if scope.respond_to?(:search_import)
       if scope.respond_to?(:find_in_batches)
         scope.find_in_batches batch_size: batch_size do |batch|
-          import batch.select{|item| item.should_index? }
+          import batch.select(&:should_index?)
         end
       else
         # https://github.com/karmi/tire/blob/master/lib/tire/model/import.rb
@@ -220,7 +217,7 @@ module Searchkick
         scope.all.each do |item|
           items << item if item.should_index?
           if items.length == batch_size
-            index.import items
+            import items
             items = []
           end
         end
@@ -230,8 +227,10 @@ module Searchkick
 
     def index_options
       options = @options
+      language = options[:language]
+      language = language.call if language.respond_to?(:call)
 
-      if options[:mappings] and !options[:merge_mappings]
+      if options[:mappings] && !options[:merge_mappings]
         settings = options[:settings] || {}
         mappings = options[:mappings]
       else
@@ -250,6 +249,9 @@ module Searchkick
               },
               default_index: {
                 type: "custom",
+                # character filters -> tokenizer -> token filters
+                # https://www.elastic.co/guide/en/elasticsearch/guide/current/analysis-intro.html
+                char_filter: ["ampersand"],
                 tokenizer: "standard",
                 # synonym should come last, after stemming and shingle
                 # shingle must come before searchkick_stemmer
@@ -267,11 +269,13 @@ module Searchkick
               },
               searchkick_search_nostem: {
                 type: "custom",
+                char_filter: ["ampersand"],
                 tokenizer: "standard",
                 filter: ["standard", "lowercase", "asciifolding", "searchkick_search_shingle"]
               },
               searchkick_search2_nostem: {
                 type: "custom",
+                char_filter: ["ampersand"],
                 tokenizer: "standard",
                 filter: ["standard", "lowercase", "asciifolding"]
               },
@@ -354,8 +358,18 @@ module Searchkick
                 max_gram: 50
               },
               searchkick_stemmer: {
-                type: "snowball",
-                language: options[:language] || "English"
+                # use stemmer if language is lowercase, snowball otherwise
+                # TODO deprecate language option in favor of stemmer
+                type: language == language.to_s.downcase ? "stemmer" : "snowball",
+                language: language || "English"
+              }
+            },
+            char_filter: {
+              # https://www.elastic.co/guide/en/elasticsearch/guide/current/custom-analyzers.html
+              # &_to_and
+              ampersand: {
+                type: "mapping",
+                mappings: ["&=> and "]
               }
             },
             tokenizer: {
@@ -372,14 +386,21 @@ module Searchkick
           settings.merge!(number_of_shards: 1, number_of_replicas: 0)
         end
 
+        if options[:similarity]
+          settings[:similarity] = {default: {type: options[:similarity]}}
+        end
+
         settings.deep_merge!(options[:settings] || {})
 
         # synonyms
         synonyms = options[:synonyms] || []
+
+        synonyms = synonyms.call if synonyms.respond_to?(:call)
+
         if synonyms.any?
           settings[:analysis][:filter][:searchkick_synonym] = {
             type: "synonym",
-            synonyms: synonyms.select{|s| s.size > 1 }.map{|s| s.join(",") }
+            synonyms: synonyms.select { |s| s.size > 1 }.map { |s| s.join(",") }
           }
           # choosing a place for the synonym filter when stemming is not easy
           # https://groups.google.com/forum/#!topic/elasticsearch/p7qcQlgHdB8
@@ -392,6 +413,10 @@ module Searchkick
           # - Use directional synonyms where appropriate. You want to make sure that you're not injecting terms that are too general.
           settings[:analysis][:analyzer][:default_index][:filter].insert(4, "searchkick_synonym")
           settings[:analysis][:analyzer][:default_index][:filter] << "searchkick_synonym"
+
+          %w(word_start word_middle word_end).each do |type|
+            settings[:analysis][:analyzer]["searchkick_#{type}_index".to_sym][:filter].insert(2, "searchkick_synonym")
+          end
         end
 
         if options[:wordnet]
@@ -403,51 +428,62 @@ module Searchkick
 
           settings[:analysis][:analyzer][:default_index][:filter].insert(4, "searchkick_wordnet")
           settings[:analysis][:analyzer][:default_index][:filter] << "searchkick_wordnet"
+
+          %w(word_start word_middle word_end).each do |type|
+            settings[:analysis][:analyzer]["searchkick_#{type}_index".to_sym][:filter].insert(2, "searchkick_wordnet")
+          end
         end
 
         if options[:special_characters] == false
-          settings[:analysis][:analyzer].each do |analyzer, analyzer_settings|
-            analyzer_settings[:filter].reject!{|f| f == "asciifolding" }
+          settings[:analysis][:analyzer].each do |_, analyzer_settings|
+            analyzer_settings[:filter].reject! { |f| f == "asciifolding" }
           end
         end
 
         mapping = {}
 
         # conversions
-        if options[:conversions]
-          mapping[:conversions] = {
+        if (conversions_field = options[:conversions])
+          mapping[conversions_field] = {
             type: "nested",
             properties: {
-              query: {type: "string", analyzer: "searchkick_keyword_nostem"},
+              query: {type: "string", analyzer: "searchkick_keyword"},
               count: {type: "integer"}
             }
           }
         end
 
         mapping_options = Hash[
-          [:autocomplete, :suggest, :text_start, :text_middle, :text_end, :word_start, :word_middle, :word_end, :highlight]
-            .map{|type| [type, (options[type] || []).map(&:to_s)] }
+          [:autocomplete, :suggest, :word, :text_start, :text_middle, :text_end, :word_start, :word_middle, :word_end, :highlight, :searchable, :only_analyzed]
+            .map { |type| [type, (options[type] || []).map(&:to_s)] }
         ]
+
+        word = options[:word] != false && (!options[:match] || options[:match] == :word)
 
         mapping_options.values.flatten.uniq.each do |field|
           field_mapping = {
             type: "multi_field",
-            fields: {
-              field => {type: "string", index: "not_analyzed"},
-              "analyzed" => {type: "string", index: "analyzed"}
-              # term_vector: "with_positions_offsets" for fast / correct highlighting
-              # http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-request-highlighting.html#_fast_vector_highlighter
-            }
+            fields: {}
           }
 
-          mapping_options.except(:highlight).each do |type, fields|
-            if fields.include?(field)
-              field_mapping[:fields][type] = {type: "string", index: "analyzed", analyzer: "searchkick_#{type}_index"}
-            end
+          unless mapping_options[:only_analyzed].include?(field)
+            field_mapping[:fields][field] = {type: "string", index: "not_analyzed"}
           end
 
-          if mapping_options[:highlight].include?(field)
-            field_mapping[:fields]["analyzed"][:term_vector] = "with_positions_offsets"
+          if !options[:searchable] || mapping_options[:searchable].include?(field)
+            if word
+              field_mapping[:fields]["analyzed"] = {type: "string", index: "analyzed"}
+
+              if mapping_options[:highlight].include?(field)
+                field_mapping[:fields]["analyzed"][:term_vector] = "with_positions_offsets"
+              end
+            end
+
+            mapping_options.except(:highlight, :searchable, :only_analyzed).each do |type, fields|
+              if options[:match] == type || fields.include?(field)
+                field_mapping[:fields][type] = {type: "string", index: "analyzed", analyzer: "searchkick_#{type}_index"}
+              end
+            end
           end
 
           mapping[field] = field_mapping
@@ -466,9 +502,36 @@ module Searchkick
           }
         end
 
+        routing = {}
+        if options[:routing]
+          routing = {required: true}
+          unless options[:routing] == true
+            routing[:path] = options[:routing].to_s
+          end
+        end
+
+        dynamic_fields = {
+          # analyzed field must be the default field for include_in_all
+          # http://www.elasticsearch.org/guide/reference/mapping/multi-field-type/
+          # however, we can include the not_analyzed field in _all
+          # and the _all index analyzer will take care of it
+          "{name}" => {type: "string", index: "not_analyzed", include_in_all: !options[:searchable]}
+        }
+
+        unless options[:searchable]
+          if options[:match] && options[:match] != :word
+            dynamic_fields[options[:match]] = {type: "string", index: "analyzed", analyzer: "searchkick_#{options[:match]}_index"}
+          end
+
+          if word
+            dynamic_fields["analyzed"] = {type: "string", index: "analyzed"}
+          end
+        end
+
         mappings = {
           _default_: {
             properties: mapping,
+            _routing: routing,
             # https://gist.github.com/kimchy/2898285
             dynamic_templates: [
               {
@@ -478,14 +541,7 @@ module Searchkick
                   mapping: {
                     # http://www.elasticsearch.org/guide/reference/mapping/multi-field-type/
                     type: "multi_field",
-                    fields: {
-                      # analyzed field must be the default field for include_in_all
-                      # http://www.elasticsearch.org/guide/reference/mapping/multi-field-type/
-                      # however, we can include the not_analyzed field in _all
-                      # and the _all index analyzer will take care of it
-                      "{name}" => {type: "string", index: "not_analyzed"},
-                      "analyzed" => {type: "string", index: "analyzed"}
-                    }
+                    fields: dynamic_fields
                   }
                 }
               }
@@ -503,7 +559,7 @@ module Searchkick
     # other
 
     def tokens(text, options = {})
-      client.indices.analyze({text: text, index: name}.merge(options))["tokens"].map{|t| t["token"] }
+      client.indices.analyze({text: text, index: name}.merge(options))["tokens"].map { |t| t["token"] }
     end
 
     def klass_document_type(klass)
@@ -521,11 +577,16 @@ module Searchkick
     end
 
     def document_type(record)
-      klass_document_type(record.class)
+      if record.respond_to?(:search_document_type)
+        record.search_document_type
+      else
+        klass_document_type(record.class)
+      end
     end
 
     def search_id(record)
-      record.id.is_a?(Numeric) ? record.id : record.id.to_s
+      id = record.respond_to?(:search_document_id) ? record.search_document_id : record.id
+      id.is_a?(Numeric) ? id : id.to_s
     end
 
     def search_data(record)
@@ -534,26 +595,27 @@ module Searchkick
 
       # stringify fields
       # remove _id since search_id is used instead
-      source = source.inject({}){|memo,(k,v)| memo[k.to_s] = v; memo}.except("_id")
+      source = source.inject({}) { |memo, (k, v)| memo[k.to_s] = v; memo }.except("_id")
 
       # conversions
       conversions_field = options[:conversions]
-      if conversions_field and source[conversions_field]
-        source[conversions_field] = source[conversions_field].map{|k, v| {query: k, count: v} }
+      if conversions_field && source[conversions_field]
+        source[conversions_field] = source[conversions_field].map { |k, v| {query: k, count: v} }
       end
 
       # hack to prevent generator field doesn't exist error
       (options[:suggest] || []).map(&:to_s).each do |field|
-        source[field] = nil if !source[field]
+        source[field] = nil unless source[field]
       end
 
       # locations
       (options[:locations] || []).map(&:to_s).each do |field|
         if source[field]
-          if source[field].first.is_a?(Array) # array of arrays
-            source[field] = source[field].map{|a| a.map(&:to_f).reverse }
+          if !source[field].is_a?(Hash) && (source[field].first.is_a?(Array) || source[field].first.is_a?(Hash))
+            # multiple locations
+            source[field] = source[field].map { |a| location_value(a) }
           else
-            source[field] = source[field].map(&:to_f).reverse
+            source[field] = location_value(source[field])
           end
         end
       end
@@ -561,6 +623,16 @@ module Searchkick
       cast_big_decimal(source)
 
       source.as_json
+    end
+
+    def location_value(value)
+      if value.is_a?(Array)
+        value.map(&:to_f).reverse
+      elsif value.is_a?(Hash)
+        {lat: value[:lat].to_f, lon: value[:lon].to_f}
+      else
+        value
+      end
     end
 
     # change all BigDecimal values to floats due to
@@ -582,6 +654,5 @@ module Searchkick
         obj
       end
     end
-
   end
 end

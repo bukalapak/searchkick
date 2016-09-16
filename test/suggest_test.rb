@@ -1,7 +1,6 @@
 require_relative "test_helper"
 
-class TestSuggest < Minitest::Test
-
+class SuggestTest < Minitest::Test
   def test_basic
     store_names ["Great White Shark", "Hammerhead Shark", "Tiger Shark"]
     assert_suggest "How Big is a Tigre Shar", "how big is a tiger shark", fields: [:name]
@@ -19,13 +18,13 @@ class TestSuggest < Minitest::Test
 
   def test_without_option
     store_names ["hi"] # needed to prevent ElasticsearchException - seed 668
-    assert_raises(RuntimeError){ Product.search("hi").suggestions }
+    assert_raises(RuntimeError) { Product.search("hi").suggestions }
   end
 
   def test_multiple_fields
     store [
       {name: "Shark", color: "Sharp"},
-      {name: "Shark", color: "Sharp"},
+      {name: "Shark", color: "Sharp"}
     ]
     assert_suggest_all "shar", ["shark", "sharp"]
   end
@@ -78,5 +77,4 @@ class TestSuggest < Minitest::Test
   def assert_suggest_all(term, expected, options = {})
     assert_equal expected.sort, Product.search(term, options.merge(suggest: true)).suggestions.sort
   end
-
 end
