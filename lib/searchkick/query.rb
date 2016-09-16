@@ -234,7 +234,7 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: match_type || "cross_fields",
-                  fields: fields,
+                  fields: boost_fields,
                   operator: operator,
                   boost: options[:fuzziness_factor] || 10,
                   analyzer: "searchkick_search_nostem"
@@ -244,7 +244,7 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: match_type || "cross_fields",
-                  fields: fields,
+                  fields: boost_fields,
                   operator: operator,
                   boost: options[:fuzziness_factor] || 10,
                   analyzer: "searchkick_search2_nostem"
@@ -258,7 +258,7 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: match_type || "best_fields",
-                  fields: fields,
+                  fields: boost_fields,
                   operator: operator,
                   fuzziness: edit_distance,
                   max_expansions: 100,
@@ -269,7 +269,7 @@ module Searchkick
                 multi_match:{
                   query: term,
                   type: match_type || "best_fields",
-                  fields: fields,
+                  fields: boost_fields,
                   operator: operator,
                   fuzziness: edit_distance,
                   max_expansions: 100,
@@ -405,7 +405,7 @@ module Searchkick
     end
 
     def set_fields
-      boost_fields = {}
+      boost_fields = []
       fields = options[:fields] || searchkick_options[:searchable]
       fields =
         if fields
@@ -416,7 +416,7 @@ module Searchkick
               k, v = value.is_a?(Hash) ? value.to_a.first : [value, options[:match] || searchkick_options[:match] || :word]
               k2, boost = k.to_s.split("^", 2)
               field = "#{k2}.#{v == :word ? 'analyzed' : v}"
-              boost_fields[field] = boost.to_f if boost
+              boost_fields << ( boost ? "#{field}^#{boost}" : field )
               field
             end
           end
