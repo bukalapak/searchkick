@@ -427,6 +427,7 @@ module Searchkick
             ["_all"]
           end
         end
+      boost_fields = fields if boost_fields.empty?
       [boost_fields, fields]
     end
 
