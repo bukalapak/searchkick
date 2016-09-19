@@ -142,27 +142,6 @@ module Searchkick
     end
   end
 
-  def self.queue_items(items)
-    queued_items.concat(items)
-    perform_bulk unless callbacks_value == :bulk
-  end
-
-  def self.perform_bulk
-    items = queued_items
-    clear_queued_items
-    perform_items(items)
-  end
-
-  def self.perform_items(items)
-    if items.any?
-      response = client.bulk(body: items)
-      if response["errors"]
-        first_item = response["items"].first
-        raise Searchkick::ImportError, (first_item["index"] || first_item["delete"])["error"]
-      end
-    end
-  end
-
   def self.search(term = nil, options = {}, &block)
     query = Searchkick::Query.new(nil, term, options)
     block.call(query.body) if block
