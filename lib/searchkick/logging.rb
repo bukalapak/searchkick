@@ -57,9 +57,12 @@ module Searchkick
       rt
     end
 
+    def debug(object)
+      DebuggingFile.write("#{object.to_s}\n")
+    end
+
     def search(event)
       self.class.runtime += event.duration
-      return unless logger.debug?
 
       payload = event.payload
       name = "#{payload[:name]} (#{event.duration.round(1)}ms)"
@@ -68,29 +71,27 @@ module Searchkick
 
       # no easy way to tell which host the client will use
       host = Searchkick.client.transport.hosts.first
-      debug "  #{color(name, YELLOW, true)}  curl #{host[:protocol]}://#{host[:host]}:#{host[:port]}/#{CGI.escape(index)}#{type ? "/#{type.map { |t| CGI.escape(t) }.join(',')}" : ''}/_search?pretty -d '#{payload[:body].to_json}'"
+      debug payload[:body]
     end
 
     def request(event)
       self.class.runtime += event.duration
-      return unless logger.debug?
 
       payload = event.payload
       name = "#{payload[:name]} (#{event.duration.round(1)}ms)"
 
-      debug "  #{color(name, YELLOW, true)}  #{payload.except(:name).to_json}"
+      debug payload[:body]
     end
 
     def multi_search(event)
       self.class.runtime += event.duration
-      return unless logger.debug?
 
       payload = event.payload
       name = "#{payload[:name]} (#{event.duration.round(1)}ms)"
 
       # no easy way to tell which host the client will use
       host = Searchkick.client.transport.hosts.first
-      debug "  #{color(name, YELLOW, true)}  curl #{host[:protocol]}://#{host[:host]}:#{host[:port]}/_msearch?pretty -d '#{payload[:body]}'"
+      debug payload[:body]
     end
   end
 
