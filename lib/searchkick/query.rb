@@ -108,7 +108,8 @@ module Searchkick
         includes: options[:include] || options[:includes],
         json: !options[:json].nil?,
         match_suffix: @match_suffix,
-        highlighted_fields: @highlighted_fields || []
+        highlighted_fields: @highlighted_fields || [],
+        unscoped: options[:unscoped]
       }
 
       # set execute for multi search
