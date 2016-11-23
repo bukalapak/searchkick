@@ -229,54 +229,66 @@ module Searchkick
               }
             }
           else
-            match_type = options[:match] if options[:match].in?([:phrase])
-            queries = [
-              {
-                multi_match:{
-                  query: term,
-                  type: match_type || "cross_fields",
-                  fields: boost_fields,
-                  operator: operator,
-                  boost: options[:fuzziness_factor] || 10,
-                  analyzer: "searchkick_search_nostem"
-                }
-              },
-              {
-                multi_match:{
-                  query: term,
-                  type: match_type || "cross_fields",
-                  fields: boost_fields,
-                  operator: operator,
-                  boost: options[:fuzziness_factor] || 10,
-                  analyzer: "searchkick_search2_nostem"
-                }
-              }
-            ]
-            misspellings = options.has_key?(:misspellings) ? options[:misspellings] : options[:mispellings]
-            edit_distance = (misspellings.is_a?(Hash) && (misspellings[:edit_distance] || misspellings[:distance])) || 1 if misspellings != false
-            if edit_distance && edit_distance > 0
-              queries << {
-                multi_match:{
-                  query: term,
-                  type: match_type || "best_fields",
-                  fields: boost_fields,
-                  operator: operator,
-                  fuzziness: edit_distance,
-                  max_expansions: 100,
-                  analyzer: "searchkick_search_nostem"
-                }
-              }
-              queries << {
-                multi_match:{
-                  query: term,
-                  type: match_type || "best_fields",
-                  fields: boost_fields,
-                  operator: operator,
-                  fuzziness: edit_distance,
-                  max_expansions: 100,
-                  analyzer: "searchkick_search2_nostem"
-                }
-              }
+            queries = []
+            misspellings = options.fetch(:misspellings, true)
+
+            if misspellings.is_a?(Hash) && misspellings[:below] && !@misspellings_below
+              @misspellings_below = misspellings[:below].to_i
+              misspellings = false
+            end
+
+            if misspellings != false
+              edit_distance = (misspellings.is_a?(Hash) && (misspellings[:edit_distance] || misspellings[:distance])) || 1
+              transpositions =
+                if misspellings.is_a?(Hash) && misspellings.key?(:transpositions)
+                  {fuzzy_transpositions: misspellings[:transpositions]}
+                elsif below14?
+                  {}
+                else
+                  {fuzzy_transpositions: true}
+                end
+              prefix_length = (misspellings.is_a?(Hash) && misspellings[:prefix_length]) || 0
+              default_max_expansions = @misspellings_below ? 20 : 3
+              max_expansions = (misspellings.is_a?(Hash) && misspellings[:max_expansions]) || default_max_expansions
+            end
+
+            fields.each do |field|
+              qs = []
+
+              factor = boost_fields[field] || 1
+              shared_options = {
+                query: term,
+                operator: operator,
+                boost: 10 * factor
+               }
+
+              match_type =
+                if field.end_with?(".phrase")
+                  field = field.sub(/\.phrase\z/, ".analyzed")
+                  :match_phrase
+                else
+                  :match
+                end
+
+              if field == "_all" || field.end_with?(".analyzed")
+                shared_options[:cutoff_frequency] = 0.001 unless operator.to_sym == :and || misspellings == false
+                qs.concat [
+                  shared_options.merge(analyzer: "searchkick_search_nostem"),
+                  shared_options.merge(analyzer: "searchkick_search2_nostem")
+                ]
+              elsif field.end_with?(".exact")
+                f = field.split(".")[0..2].join(".")
+                queries << {match: {f => shared_options.merge(analyzer: "keyword")}}
+              else
+                analyzer = field.match(/\.word_(start|middle|end)\z/) ? "searchkick_word_search" : "searchkick_autocomplete_search"
+                qs << shared_options.merge(analyzer: analyzer)
+              end
+
+              if misspellings != false
+                qs.concat qs.map { |q| q.except(:cutoff_frequency).merge(fuzziness: edit_distance, prefix_length: prefix_length, max_expansions: max_expansions, boost: factor).merge(transpositions) }
+              end
+
+              queries.concat(qs.map { |q| {match_type => {field => q}} })
             end
 
             payload = {
@@ -406,7 +418,7 @@ module Searchkick
     end
 
     def set_fields
-      boost_fields = []
+      boost_fields = {}
       fields = options[:fields] || searchkick_options[:searchable]
       fields =
         if fields
@@ -417,7 +429,7 @@ module Searchkick
               k, v = value.is_a?(Hash) ? value.to_a.first : [value, options[:match] || searchkick_options[:match] || :word]
               k2, boost = k.to_s.split("^", 2)
               field = "#{k2}.#{v == :word ? 'analyzed' : v}"
-              boost_fields << ( boost ? "#{field}^#{boost}" : field )
+              boost_fields[field] = boost.to_f if boost
               field
             end
           end
@@ -428,7 +440,6 @@ module Searchkick
             ["_all"]
           end
         end
-      boost_fields = fields if boost_fields.empty?
       [boost_fields, fields]
     end
 
